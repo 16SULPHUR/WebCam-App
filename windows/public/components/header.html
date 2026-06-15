@@ -1,0 +1,23 @@
+<div class="logo-container">
+  <div class="logo-icon" id="logo-pulse"></div>
+  <h1>USB Webcam Bridge</h1>
+</div>
+<div class="header-right">
+  <div class="stat-badge" title="H.264 data received">
+    <span class="stat-badge-label">H.264 IN</span>
+    <span class="stat-badge-val accent-emerald" id="hdr-h264">0 KB</span>
+  </div>
+  <div class="stat-badge" title="Decoded frames">
+    <span class="stat-badge-label">FRAMES</span>
+    <span class="stat-badge-val accent-cyan" id="hdr-frames">0</span>
+  </div>
+  <div class="stat-badge" title="Estimated FPS">
+    <span class="stat-badge-label">FPS</span>
+    <span class="stat-badge-val accent-orange" id="hdr-fps">--</span>
+  </div>
+  <canvas id="fps-sparkline" width="80" height="28" title="FPS history"></canvas>
+  <div class="status-badge">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Disconnected</span>
+  </div>
+</div>

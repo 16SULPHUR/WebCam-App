@@ -1,0 +1,55 @@
+<div class="card" id="feed-card">
+  <div class="card-title">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-cyan)"><path d="M23 7a2 2 0 0 0-2.45-1.45L16 7V5a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l4.55 1.45A2 2 0 0 0 23 17V7z"/></svg>
+    Live Video Feed
+    <span class="card-badge" id="feed-badge">OFFLINE</span>
+    <!-- Record indicator -->
+    <span class="rec-indicator" id="rec-indicator" style="display:none;">
+      <span class="rec-dot-blink"></span> REC
+    </span>
+  </div>
+
+  <div class="feed-container" id="feed-container">
+    <div class="feed-placeholder" id="feed-placeholder">
+      <div class="placeholder-icon">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2">
+          <rect x="2" y="2" width="20" height="20" rx="2.18"/>
+          <line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/>
+          <line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/>
+          <line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/>
+          <line x1="17" y1="7" x2="22" y2="7"/>
+        </svg>
+      </div>
+      <span>Waiting for H.264 stream...</span>
+      <span class="placeholder-sub">Make sure ADB is connected and the bridge is running on your phone</span>
+    </div>
+    <!-- Feed image wrapped so CSS rotation doesn't overflow -->
+    <div class="feed-img-wrapper" id="feed-img-wrapper">
+      <img class="feed-img" id="feed-img" src="" style="display:none;" alt="Live Webcam Feed">
+    </div>
+    <!-- FPS overlay -->
+    <div class="feed-overlay" id="feed-overlay" style="display:none;">
+      <span id="overlay-fps">-- fps</span>
+    </div>
+  </div>
+
+  <!-- Stream health -->
+  <div id="stream-health">
+    <div class="health-item">
+      <span class="health-label">Signal</span>
+      <div class="health-bar-track"><div class="health-bar-fill" id="health-signal" style="width:0%"></div></div>
+    </div>
+    <div class="health-item">
+      <span class="health-label">Bitrate</span>
+      <span class="health-val" id="health-bitrate">0 KB/s</span>
+    </div>
+    <div class="health-item">
+      <span class="health-label">VCam</span>
+      <span class="health-val" id="health-vcam" style="color:var(--accent-rose)">OFF</span>
+    </div>
+    <div class="health-item">
+      <span class="health-label">REC</span>
+      <span class="health-val" id="health-rec" style="color:var(--text-muted)">IDLE</span>
+    </div>
+  </div>
+</div>

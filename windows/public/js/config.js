@@ -58,18 +58,21 @@ const Config = (() => {
     const contrast   = cfg.contrast   ?? 1.0;
     const saturation = cfg.saturation ?? 1.0;
     const sharpness  = cfg.sharpness  ?? 0.0;
+    const blur       = cfg.blur       ?? 0;
     const targetFps  = cfg.targetFps  ?? 30;
 
     setSlider('brightness-range', brightness);
     setSlider('contrast-range',   contrast);
     setSlider('saturation-range', saturation);
     setSlider('sharpness-range',  sharpness);
+    setSlider('blur-range',       blur);
     if (el('fps-select')) el('fps-select').value = String(targetFps);
 
     if (el('brightness-val')) el('brightness-val').textContent = parseFloat(brightness).toFixed(2);
     if (el('contrast-val'))   el('contrast-val').textContent   = parseFloat(contrast).toFixed(2);
     if (el('saturation-val')) el('saturation-val').textContent = parseFloat(saturation).toFixed(2);
     if (el('sharpness-val'))  el('sharpness-val').textContent  = parseFloat(sharpness).toFixed(1);
+    if (el('blur-val'))       el('blur-val').textContent       = parseInt(blur) === 0 ? 'Off' : parseInt(blur) + 'px';
   }
 
   // ── Orientation ───────────────────────────────────────────────────────────
@@ -100,10 +103,12 @@ const Config = (() => {
     const c = el('contrast-range')?.value   ?? 1;
     const s = el('saturation-range')?.value ?? 1;
     const sh = el('sharpness-range')?.value ?? 0;
+    const bl = el('blur-range')?.value      ?? 0;
     if (el('brightness-val')) el('brightness-val').textContent = parseFloat(b).toFixed(2);
     if (el('contrast-val'))   el('contrast-val').textContent   = parseFloat(c).toFixed(2);
     if (el('saturation-val')) el('saturation-val').textContent = parseFloat(s).toFixed(2);
     if (el('sharpness-val'))  el('sharpness-val').textContent  = parseFloat(sh).toFixed(1);
+    if (el('blur-val'))       el('blur-val').textContent       = parseInt(bl) === 0 ? 'Off' : parseInt(bl) + 'px';
 
     // Debounce API call (avoid rapid pipeline restarts while dragging)
     clearTimeout(processingTimeout);
@@ -115,12 +120,14 @@ const Config = (() => {
     if (el('contrast-range'))   el('contrast-range').value   = 1.0;
     if (el('saturation-range')) el('saturation-range').value = 1.0;
     if (el('sharpness-range'))  el('sharpness-range').value  = 0.0;
+    if (el('blur-range'))       el('blur-range').value       = 0;
     if (el('fps-select'))       el('fps-select').value       = '30';
     if (el('brightness-val')) el('brightness-val').textContent = '0.00';
     if (el('contrast-val'))   el('contrast-val').textContent   = '1.00';
     if (el('saturation-val')) el('saturation-val').textContent = '1.00';
     if (el('sharpness-val'))  el('sharpness-val').textContent  = '0.0';
-    Terminal.addLine('system', 'Processing reset to defaults — applying…');
+    if (el('blur-val'))       el('blur-val').textContent       = 'Off';
+    Terminal.addLine('system', 'Processing reset to defaults - applying...');
     update();
   }
 
@@ -138,12 +145,13 @@ const Config = (() => {
       contrast:    parseFloat(el('contrast-range')?.value   || 1.0),
       saturation:  parseFloat(el('saturation-range')?.value || 1.0),
       sharpness:   parseFloat(el('sharpness-range')?.value  || 0.0),
+      blur:        parseInt(el('blur-range')?.value         || 0, 10),
       targetFps:   parseInt(el('fps-select')?.value         || 30, 10),
     };
 
     Terminal.addLine('system',
       `Saving config: res=${payload.resolution}, mirror=${payload.mirror}, ` +
-      `ori=${payload.orientation}°, zoom=${payload.zoom}x, fps=${payload.targetFps}`
+      `ori=${payload.orientation}°, zoom=${payload.zoom}x, fps=${payload.targetFps}, blur=${payload.blur}px`
     );
 
     try {
