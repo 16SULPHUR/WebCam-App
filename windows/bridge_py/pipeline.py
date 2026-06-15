@@ -156,6 +156,10 @@ class Pipeline:
         saturation        = float(cfg.get("saturation", 1.0))
         sharpness         = float(cfg.get("sharpness", 0.0))
         target_fps        = int(cfg.get("targetFps", 30))
+        blur              = int(cfg.get("blur", 0))
+
+        # Determine if Python needs to run
+        py_needs_to_run = vcam_enabled or (blur > 0)
 
         # Rotated output dimensions for VCam
         rot = int(orientation)
@@ -168,69 +172,71 @@ class Pipeline:
         print(f"[Pipeline] Starting - VCam={width}x{height}->{py_w}x{py_h}, "
               f"Mirror={mirror}, Ori={orientation} deg, Zoom={zoom}x, "
               f"FPS={target_fps}, Brightness={brightness}, "
-              f"Contrast={contrast}, Saturation={saturation}, Sharpness={sharpness}")
+              f"Contrast={contrast}, Saturation={saturation}, Sharpness={sharpness}, Blur={blur}")
 
         # ── FFmpeg VCam ──────────────────────────────────────────────────────
-        vcam_args = build_vcam_args(
-            self._ffmpeg, width, height,
-            mirror, orientation, zoom,
-            brightness, contrast, saturation, sharpness, target_fps,
-        )
-        self._vcam_proc = subprocess.Popen(
-            vcam_args,
-            bufsize=0,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        threading.Thread(
-            target=self._drain_vcam_stdout,
-            args=(self._vcam_proc, py_w, py_h),
-            daemon=True, name="VcamStdout",
-        ).start()
-        threading.Thread(
-            target=self._drain_stderr,
-            args=(self._vcam_proc, "FFmpeg-VCam"),
-            daemon=True, name="VcamStderr",
-        ).start()
-        threading.Thread(
-            target=self._watch_vcam_proc,
-            args=(self._vcam_proc,),
-            daemon=True, name="VcamWatch",
-        ).start()
+        if py_needs_to_run:
+            vcam_args = build_vcam_args(
+                self._ffmpeg, width, height,
+                mirror, orientation, zoom,
+                brightness, contrast, saturation, sharpness, target_fps,
+            )
+            self._vcam_proc = subprocess.Popen(
+                vcam_args,
+                bufsize=0,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            threading.Thread(
+                target=self._drain_vcam_stdout,
+                args=(self._vcam_proc, py_w, py_h),
+                daemon=True, name="VcamStdout",
+            ).start()
+            threading.Thread(
+                target=self._drain_stderr,
+                args=(self._vcam_proc, "FFmpeg-VCam"),
+                daemon=True, name="VcamStderr",
+            ).start()
+            threading.Thread(
+                target=self._watch_vcam_proc,
+                args=(self._vcam_proc,),
+                daemon=True, name="VcamWatch",
+            ).start()
 
         # ── FFmpeg Web ───────────────────────────────────────────────────────
-        web_args = build_web_args(
-            self._ffmpeg, mirror, orientation, zoom,
-            brightness, contrast, saturation, sharpness, target_fps,
-        )
-        self._web_proc = subprocess.Popen(
-            web_args,
-            bufsize=0,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        threading.Thread(
-            target=self._drain_web_stdout,
-            args=(self._web_proc,),
-            daemon=True, name="WebStdout",
-        ).start()
-        threading.Thread(
-            target=self._drain_stderr,
-            args=(self._web_proc, "FFmpeg-Web"),
-            daemon=True, name="WebStderr",
-        ).start()
-        threading.Thread(
-            target=self._watch_web_proc,
-            args=(self._web_proc,),
-            daemon=True, name="WebWatch",
-        ).start()
+        if blur == 0:
+            web_args = build_web_args(
+                self._ffmpeg, mirror, orientation, zoom,
+                brightness, contrast, saturation, sharpness, target_fps,
+            )
+            self._web_proc = subprocess.Popen(
+                web_args,
+                bufsize=0,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            threading.Thread(
+                target=self._drain_web_stdout,
+                args=(self._web_proc,),
+                daemon=True, name="WebStdout",
+            ).start()
+            threading.Thread(
+                target=self._drain_stderr,
+                args=(self._web_proc, "FFmpeg-Web"),
+                daemon=True, name="WebStderr",
+            ).start()
+            threading.Thread(
+                target=self._watch_web_proc,
+                args=(self._web_proc,),
+                daemon=True, name="WebWatch",
+            ).start()
 
-        # ── Python frame_sender (VCam) ───────────────────────────────────────
-        if vcam_enabled:
+        # ── Python frame_sender (VCam / Processed Preview) ───────────────────
+        if py_needs_to_run:
             self._py_proc = subprocess.Popen(
-                [self._python, self._script, str(py_w), str(py_h)],
+                [self._python, "-u", self._script, str(py_w), str(py_h), str(blur), "1" if vcam_enabled else "0"],
                 bufsize=0,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -363,15 +369,50 @@ class Pipeline:
                 break
 
     def _drain_py_stdout(self, proc: subprocess.Popen) -> None:
-        """Forward Python frame_sender stdout to the dashboard log."""
+        """Read binary JPEG preview frames from Python and broadcast to clients.
+        
+        NOTE: proc.stdout from subprocess.PIPE is already a binary BufferedReader.
+        It does NOT have a .buffer attribute — that only exists on TextIOWrapper.
+        We use proc.stdout directly.
+        """
+        stdout_buf = proc.stdout  # already a binary BufferedReader
         try:
-            for raw in proc.stdout:
-                msg = raw.decode(errors="replace").strip()
-                if msg:
-                    print(msg)
-                    self._bc.broadcast_log("python", msg)
-        except Exception:
-            pass
+            while True:
+                # Read 4-byte length header
+                len_bytes = b""
+                while len(len_bytes) < 4:
+                    chunk = stdout_buf.read(4 - len(len_bytes))
+                    if not chunk:
+                        # EOF — process exited and pipe drained
+                        return
+                    len_bytes += chunk
+
+                length = int.from_bytes(len_bytes, byteorder="big")
+                if length <= 0 or length > 10_000_000:  # sanity check (<10 MB)
+                    # Corrupt framing — stop reading
+                    print(f"[Pipeline] _drain_py_stdout: bad frame length {length}, stopping.",
+                          file=__import__('sys').stderr)
+                    return
+
+                # Read frame payload
+                jpeg_bytes = b""
+                while len(jpeg_bytes) < length:
+                    chunk = stdout_buf.read(length - len(jpeg_bytes))
+                    if not chunk:
+                        return  # truncated frame at EOF
+                    jpeg_bytes += chunk
+
+                # Construct MJPEG boundary chunk
+                boundary = (
+                    b"\r\n--ffmpeg\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(length).encode("ascii") + b"\r\n\r\n"
+                    + jpeg_bytes + b"\r\n"
+                )
+                self._bc.send_video_chunk(boundary)
+        except Exception as exc:
+            import sys as _sys
+            print(f"[Pipeline] _drain_py_stdout error: {exc}", file=_sys.stderr)
 
     def _drain_stderr(self, proc: subprocess.Popen, label: str) -> None:
         """Forward FFmpeg/Python stderr to dashboard log (line by line)."""

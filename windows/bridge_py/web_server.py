@@ -60,7 +60,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         try:
             if path in ("/", "/index.html"):
                 self._serve_file("index.html")
-            elif path.startswith("/css/") or path.startswith("/js/"):
+            elif path.startswith("/css/") or path.startswith("/js/") or path.startswith("/components/"):
                 self._serve_file(path.lstrip("/"))
             elif path == "/api/config":
                 self._json(self.config.to_dict())

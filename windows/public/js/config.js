@@ -8,6 +8,8 @@
 const Config = (() => {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
+  let _loading = false;  // suppress spurious saves while load() applies slider values
+
   function el(id) { return document.getElementById(id); }
 
   function setSlider(id, val) {
@@ -26,6 +28,7 @@ const Config = (() => {
   // ── Load ─────────────────────────────────────────────────────────────────
 
   async function load() {
+    _loading = true;
     try {
       const res = await fetch('/api/config');
       if (!res.ok) throw new Error(res.statusText);
@@ -50,6 +53,8 @@ const Config = (() => {
       Terminal.addLine('system', `Config loaded: res=${cfg.resolution}, mirror=${cfg.mirror}, ori=${cfg.orientation}°, zoom=${zoom}x`);
     } catch (err) {
       Terminal.addLine('system', `Failed to load config: ${err.message}`);
+    } finally {
+      _loading = false;
     }
   }
 
@@ -89,8 +94,9 @@ const Config = (() => {
 
   function onZoomChange(val) {
     if (el('zoom-val')) el('zoom-val').textContent = parseFloat(val).toFixed(1) + 'x';
+    if (_loading) return;  // suppress saves during initial load
     clearTimeout(zoomTimeout);
-    zoomTimeout = setTimeout(update, 400);
+    zoomTimeout = setTimeout(update, 800);
   }
 
   // ── Video Processing ──────────────────────────────────────────────────────
@@ -110,9 +116,11 @@ const Config = (() => {
     if (el('sharpness-val'))  el('sharpness-val').textContent  = parseFloat(sh).toFixed(1);
     if (el('blur-val'))       el('blur-val').textContent       = parseInt(bl) === 0 ? 'Off' : parseInt(bl) + 'px';
 
+    if (_loading) return;  // suppress saves during initial load
+
     // Debounce API call (avoid rapid pipeline restarts while dragging)
     clearTimeout(processingTimeout);
-    processingTimeout = setTimeout(update, 600);
+    processingTimeout = setTimeout(update, 1000);
   }
 
   function resetProcessing() {
@@ -162,6 +170,15 @@ const Config = (() => {
       });
       if (res.ok) {
         Terminal.addLine('system', '✓ Config saved — pipeline restarting…');
+        // Pipeline restart kills FFmpeg and spawns a new one.
+        // Force-reload the feed after a short delay so the browser opens a
+        // fresh HTTP connection to the new MJPEG stream.
+        setTimeout(() => {
+          const img = document.getElementById('feed-img');
+          if (img && img.style.display !== 'none') {
+            img.src = '/video_feed?' + Date.now();
+          }
+        }, 2500);
       } else {
         Terminal.addLine('system', `Config save failed: ${res.statusText}`);
       }

@@ -23,6 +23,7 @@ _DEFAULTS: dict[str, Any] = {
     "saturation":  1.0,    # 0.0  → 2.0   (FFmpeg eq=saturation)
     "sharpness":   0.0,    # 0.0  → 2.0   (FFmpeg unsharp luma amount)
     "targetFps":   30,     # 10 / 15 / 20 / 24 / 30
+    "blur":        0,      # Background blur intensity (0 to 25)
 }
 # ─────────────────────────────────────────────────────────────────────────────
 

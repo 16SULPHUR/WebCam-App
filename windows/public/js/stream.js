@@ -34,6 +34,8 @@ const Stream = (() => {
   let isRecording = false;
   let currentOrientation = 0;
   let wasAndroidConnected = false;
+  let _feedReloadTimer = null;   // periodic keepalive timer
+  let _feedRetryTimer = null;    // retry-on-error timer
 
   // ── Sparkline ────────────────────────────────────────────────────────────
   function drawSparkline() {
@@ -91,6 +93,24 @@ const Stream = (() => {
     img.style.removeProperty('--rot-scale');
   }
 
+  /** Force-reload the MJPEG feed URL so the browser opens a fresh connection. */
+  function _reloadFeed() {
+    const img = el.feedImg();
+    if (!img) return;
+    img.src = '/video_feed?' + Date.now();
+  }
+
+  /** Start periodic keepalive reload every 30 s to recover from silent stalls. */
+  function _startFeedKeepalive() {
+    _stopFeedKeepalive();
+    _feedReloadTimer = setInterval(_reloadFeed, 30000);
+  }
+
+  function _stopFeedKeepalive() {
+    if (_feedReloadTimer) { clearInterval(_feedReloadTimer); _feedReloadTimer = null; }
+    if (_feedRetryTimer)  { clearTimeout(_feedRetryTimer);   _feedRetryTimer  = null; }
+  }
+
   // ── Status updates ────────────────────────────────────────────────────────
   function setStatus(state, text) {
     const dot = el.statusDot(), txt = el.statusText();
@@ -113,9 +133,18 @@ const Stream = (() => {
       setStatus('connected', 'Streaming Active');
       if (img) {
         img.style.display = 'block';
-        // Always reload image URL on reconnect to pick up any new stream/rotation
-        if (connTransitioned || !img.src || img.naturalWidth === 0) {
-          img.src = '/video_feed?' + Date.now();
+        // Always reload the feed on reconnect so the browser opens a fresh
+        // HTTP connection to the new pipeline's MJPEG stream.
+        if (connTransitioned) {
+          _reloadFeed();
+          _startFeedKeepalive();
+          // Wire up onerror so a stale/dropped stream auto-retries
+          img.onerror = () => {
+            if (wasAndroidConnected) {
+              if (_feedRetryTimer) clearTimeout(_feedRetryTimer);
+              _feedRetryTimer = setTimeout(_reloadFeed, 1500);
+            }
+          };
         }
       }
       if (ph)    ph.style.display  = 'none';
@@ -123,7 +152,8 @@ const Stream = (() => {
       if (badge) { badge.textContent = 'LIVE'; badge.className = 'card-badge live'; }
     } else {
       setStatus('connecting', 'Waiting for Stream');
-      if (img)   img.style.display = 'none';
+      _stopFeedKeepalive();
+      if (img)   { img.style.display = 'none'; if (img.onerror) img.onerror = null; }
       if (ph)    ph.style.display  = 'flex';
       if (ov)    ov.style.display  = 'none';
       if (badge) { badge.textContent = 'OFFLINE'; badge.className = 'card-badge'; }
