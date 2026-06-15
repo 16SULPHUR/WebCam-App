@@ -8,7 +8,6 @@
 
   // ── Initialise ──────────────────────────────────────────────────────────────
   Config.load();
-  Terminal.init();
 
   // ── SSE Log Stream ──────────────────────────────────────────────────────────
   let logEventSource = null;
@@ -74,6 +73,36 @@
         connectSSE();
       }
     }
+  });
+
+  // ── Tab Navigation ─────────────────────────────────────────────────────────
+  const navTabs = document.querySelectorAll('.nav-tab');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  navTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetTab = tab.dataset.tab;
+
+      // Update active tab button class
+      navTabs.forEach(t => t.classList.toggle('active', t === tab));
+
+      // Update active tab content class
+      tabContents.forEach(content => {
+        const isActive = content.id === `tab-${targetTab}`;
+        content.classList.toggle('active', isActive);
+      });
+
+      // Special layout logic for logs tab: if the logs tab is opened, make sure the terminal scrolls to bottom
+      if (targetTab === 'logs') {
+        const term = document.getElementById('terminal');
+        if (term) term.scrollTop = term.scrollHeight;
+      }
+    });
+  });
+
+  // Close console redirects back to camera settings tab
+  document.getElementById('btn-close-console')?.addEventListener('click', () => {
+    document.querySelector('.nav-tab[data-tab="camera"]')?.click();
   });
 
 })();

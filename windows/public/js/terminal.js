@@ -123,50 +123,5 @@ const Terminal = (() => {
     _updateCounters();
   }
 
-  function toggleCollapse() {
-    isCollapsed = !isCollapsed;
-    const body = el.body();
-    const icon = el.collapseIcon();
-    if (body) body.classList.toggle('collapsed', isCollapsed);
-    if (icon) icon.classList.toggle('collapsed', isCollapsed);
-  }
-
-  function toggleVisibility(visible) {
-    const col = document.getElementById('console-column');
-    const main = document.getElementById('app-main');
-    if (!col || !main) return;
-
-    if (visible === undefined) {
-      visible = col.style.display === 'none';
-    }
-
-    if (visible) {
-      col.style.display = 'flex';
-      main.classList.remove('console-hidden');
-    } else {
-      col.style.display = 'none';
-      main.classList.add('console-hidden');
-    }
-
-    localStorage.setItem('console-visible', visible ? '1' : '0');
-
-    const btn = document.getElementById('btn-toggle-console-visibility');
-    if (btn) {
-      btn.classList.toggle('active', visible);
-      const span = btn.querySelector('span');
-      if (span) span.textContent = visible ? 'Hide Logs' : 'Show Logs';
-    }
-  }
-
-  function init() {
-    const stored = localStorage.getItem('console-visible');
-    if (stored === '0') {
-      setTimeout(() => toggleVisibility(false), 50);
-    } else {
-      const btn = document.getElementById('btn-toggle-console-visibility');
-      if (btn) btn.classList.add('active');
-    }
-  }
-
-  return { addLine, setFilter, clear, toggleCollapse, toggleVisibility, init };
+  return { addLine, setFilter, clear };
 })();

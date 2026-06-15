@@ -38,7 +38,7 @@ const PYTHON_PATH  = resolveBinaryPath('python.exe', 'F:\\tools\\python312\\pyth
 
 // ─── Configuration settings ──────────────────────────────────────────────────
 const CONFIG_PATH = path.join(baseDir, 'config.json');
-let currentConfig = { resolution: 'auto', mirror: false, orientation: 0, vcamEnabled: true };
+let currentConfig = { resolution: 'auto', mirror: false, orientation: 0, vcamEnabled: true, zoom: 1.0 };
 
 function loadConfig() {
   try {
@@ -83,8 +83,12 @@ const ADB_PORT = 8080;                 // must match Android TCP port
 const RECONNECT_DELAY_MS    = 2000;   // ms between Android reconnect attempts
 const PIPELINE_RESTART_DELAY_MS = 1500; // ms before restarting crashed pipeline
 
-function buildVf(mirror, orientation, width, height) {
+function buildVf(mirror, orientation, width, height, zoom) {
   const parts = [];
+  const z = parseFloat(zoom || 1.0);
+  if (z > 1.0) {
+    parts.push(`crop=iw/${z}:ih/${z}`);
+  }
   if (mirror) parts.push('hflip');
   const rot = parseInt(orientation || 0, 10);
   if (rot === 90)  parts.push('transpose=1');   // 90° CW
@@ -97,8 +101,8 @@ function buildVf(mirror, orientation, width, height) {
   return parts.join(',');
 }
 
-function getFfmpegVcamArgs(width, height, mirror, orientation) {
-  const vf = buildVf(mirror, orientation, width, height);
+function getFfmpegVcamArgs(width, height, mirror, orientation, zoom) {
+  const vf = buildVf(mirror, orientation, width, height, zoom);
   return [
     '-hide_banner', '-loglevel', 'info',
     '-use_wallclock_as_timestamps', '1',
@@ -114,9 +118,14 @@ function getFfmpegVcamArgs(width, height, mirror, orientation) {
   ];
 }
 
-// Web MJPEG: NO rotation — CSS handles orientation in the browser (instant, no restart)
-function getFfmpegWebArgs(mirror) {
-  const vf = mirror ? 'hflip,scale=640:360' : 'scale=640:360';
+// Web MJPEG: apply same rotation as VCam so preview matches the actual video output
+function getFfmpegWebArgs(mirror, orientation, zoom) {
+  // Web preview uses 640x360 base, but swap if 90/270 rotation
+  const baseW = 640, baseH = 360;
+  const isRotated = (orientation === 90 || orientation === 270);
+  const outW = isRotated ? baseH : baseW;
+  const outH = isRotated ? baseW : baseH;
+  const vf = buildVf(mirror, orientation, baseW, baseH, zoom);
   return [
     '-hide_banner', '-loglevel', 'info',
     '-use_wallclock_as_timestamps', '1',
@@ -152,6 +161,13 @@ let recordingFilePath       = null;
 let tcpSocket               = null;
 let isShuttingDown          = false;
 let isRestarting            = false;
+
+// ─── VCam failure circuit-breaker ────────────────────────────────────────────
+let vcamFailureCount        = 0;
+let vcamLastFailureTime     = 0;
+let vcamDisabledForSession  = false;
+const VCAM_MAX_FAILURES     = 3;       // disable after this many fast failures
+const VCAM_FAILURE_WINDOW   = 15000;   // ms — failures within this window count
 
 // ─── Stream Stats & State ────────────────────────────────────────────────────
 let totalStdinBytesCumulative = 0;
@@ -303,10 +319,12 @@ function spawnPipeline() {
   const pyWidth  = (orientation === 90 || orientation === 270) ? height : width;
   const pyHeight = (orientation === 90 || orientation === 270) ? width  : height;
 
-  const vcamArgs = getFfmpegVcamArgs(width, height, mirror, orientation);
-  const webArgs  = getFfmpegWebArgs(mirror); // Web has no server-side rotation
+  const zoom        = currentConfig.zoom || 1.0;
 
-  console.log(`[Pipeline] Config: VCam=${width}x${height} → rotated output ${pyWidth}x${pyHeight}, Mirror=${mirror}, Orientation=${orientation}°, VCamEnabled=${vcamEnabled}`);
+  const vcamArgs = getFfmpegVcamArgs(width, height, mirror, orientation, zoom);
+  const webArgs  = getFfmpegWebArgs(mirror, orientation, zoom); // Web also applies rotation server-side
+
+  console.log(`[Pipeline] Config: VCam=${width}x${height} → rotated output ${pyWidth}x${pyHeight}, Mirror=${mirror}, Orientation=${orientation}°, Zoom=${zoom}x, VCamEnabled=${vcamEnabled}`);
 
   // ── FFmpeg VCam ─────────────────────────────────────────────────────────────
   ffmpegVcamProc = spawn(FFMPEG_PATH, vcamArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -385,11 +403,39 @@ function spawnPipeline() {
     });
 
     pythonProc.on('exit', (code) => {
-      if (code !== 0 && !isShuttingDown && !isRestarting) {
-        console.warn(`[Python] Exited (code ${code}).`);
-        console.warn('[Python] ⚠️  Virtual camera could not be opened.');
+      pythonProc = null;
+      if (isShuttingDown || isRestarting) return;
+
+      const now = Date.now();
+      if (code !== 0) {
+        // Check if this failure is within the fast-failure window
+        if (now - vcamLastFailureTime < VCAM_FAILURE_WINDOW) {
+          vcamFailureCount++;
+        } else {
+          vcamFailureCount = 1; // reset counter if gap was long
+        }
+        vcamLastFailureTime = now;
+
+        console.warn(`[Python] ⚠️  VCam failure ${vcamFailureCount}/${VCAM_MAX_FAILURES}: exited code ${code}`);
+
+        if (vcamFailureCount >= VCAM_MAX_FAILURES) {
+          vcamDisabledForSession = true;
+          currentConfig.vcamEnabled = false;
+          console.error('[Python] ❌ VCam disabled for this session after repeated failures.');
+          console.error('[Python]    Make sure OBS Virtual Camera is STARTED before launching the bridge.');
+          console.error('[Python]    Web preview is still active. Restart the bridge to retry VCam.');
+          broadcastLog('node', '❌ VCam disabled — OBS Virtual Camera not available. Web preview still running.');
+          // Do NOT restart the whole pipeline — just continue without VCam
+          return;
+        }
+      } else {
+        vcamFailureCount = 0; // clean exit — reset counter
       }
-      destroyPipelineAndRestart(`Python exited with code ${code}`);
+
+      // Restart pipeline only if not at failure cap
+      if (!vcamDisabledForSession) {
+        destroyPipelineAndRestart(`Python exited with code ${code}`);
+      }
     });
   } else {
     console.log('[Pipeline] Virtual camera disabled by user config — skipping Python.');
@@ -572,11 +618,17 @@ const webServer = http.createServer((req, res) => {
           currentConfig.mirror      = !!body.mirror;
           currentConfig.orientation = parseInt(body.orientation || 0, 10);
           currentConfig.vcamEnabled = body.vcamEnabled !== false;
+          currentConfig.zoom        = parseFloat(body.zoom || 1.0);
+          currentConfig.brightness  = parseFloat(body.brightness  != null ? body.brightness  : 0.0);
+          currentConfig.contrast    = parseFloat(body.contrast    != null ? body.contrast    : 1.0);
+          currentConfig.saturation  = parseFloat(body.saturation  != null ? body.saturation  : 1.0);
+          currentConfig.sharpness   = parseFloat(body.sharpness   != null ? body.sharpness   : 0.0);
+          currentConfig.targetFps   = parseInt(body.targetFps     != null ? body.targetFps   : 30, 10);
           saveConfig(currentConfig);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
           destroyPipelineAndRestart(
-            `Config updated: res=${body.resolution}, mirror=${body.mirror}, orientation=${body.orientation}°, vcam=${body.vcamEnabled}`
+            `Config updated: res=${body.resolution}, mirror=${body.mirror}, orientation=${body.orientation}°, vcam=${body.vcamEnabled}, zoom=${body.zoom}x`
           );
         } else {
           res.writeHead(400); res.end('Invalid request');

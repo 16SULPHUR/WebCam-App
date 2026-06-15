@@ -76,34 +76,19 @@ const Stream = (() => {
     ctx.stroke();
   }
 
-  // ── Orientation (CSS only, instant) ──────────────────────────────────────
+  // ── Orientation — server-side rotation ──────────────────────────────────────
+  // NOTE: rotation is now applied server-side by FFmpeg.
+  // This function just stores the current orientation value for reference.
+  // No CSS transform rotation needed since the MJPEG stream itself is already rotated.
   function setOrientation(deg) {
     currentOrientation = parseInt(deg, 10) || 0;
     const img = el.feedImg();
     if (!img) return;
-
-    // Remove all rotation classes
+    // Remove any leftover rotation classes from old CSS-only approach
     img.classList.remove('rot-0', 'rot-90', 'rot-180', 'rot-270');
-    img.classList.add(`rot-${currentOrientation}`);
-
-    // Compute scale factor so portrait video fills landscape container
-    // For 90/270: rotated landscape image appears portrait; scale by H/W ratio
-    const container = el.feedContainer();
-    let rotScale = 1;
-    if (currentOrientation === 90 || currentOrientation === 270) {
-      if (container) {
-        const W = container.clientWidth || 640;
-        const H = container.clientHeight || 360;
-        rotScale = H / W; // e.g. 360/640 = 0.5625 for 16:9
-      } else {
-        rotScale = 0.5625;
-      }
-    }
-    img.style.setProperty('--rot-scale', rotScale);
-
-    // Combine with zoom
-    const zoom = parseFloat(img.dataset.zoom || 1);
-    img.style.transform = `rotate(${currentOrientation}deg) scale(${rotScale * zoom})`;
+    // Reset transform — server handles rotation now
+    img.style.transform = '';
+    img.style.removeProperty('--rot-scale');
   }
 
   // ── Status updates ────────────────────────────────────────────────────────
@@ -128,10 +113,9 @@ const Stream = (() => {
       setStatus('connected', 'Streaming Active');
       if (img) {
         img.style.display = 'block';
+        // Always reload image URL on reconnect to pick up any new stream/rotation
         if (connTransitioned || !img.src || img.naturalWidth === 0) {
           img.src = '/video_feed?' + Date.now();
-          // Re-apply orientation after image loads
-          img.onload = () => setOrientation(currentOrientation);
         }
       }
       if (ph)    ph.style.display  = 'none';
@@ -289,8 +273,11 @@ const Stream = (() => {
     } else {
       document.removeEventListener('keydown', _escapeFullscreen);
     }
-    // Re-apply orientation scale after container size changes
-    setTimeout(() => setOrientation(currentOrientation), 100);
+    // Force image reload to fill new viewport dimensions
+    const img = el.feedImg();
+    if (img && img.style.display !== 'none') {
+      setTimeout(() => { img.src = img.src; }, 100);
+    }
   }
   function _escapeFullscreen(e) { if (e.key === 'Escape') toggleFullscreen(); }
 

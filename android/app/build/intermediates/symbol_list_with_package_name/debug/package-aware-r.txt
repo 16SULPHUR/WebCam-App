@@ -2977,11 +2977,15 @@ drawable btn_radio_off_mtrl
 drawable btn_radio_off_to_on_mtrl_animation
 drawable btn_radio_on_mtrl
 drawable btn_radio_on_to_off_mtrl_animation
+drawable circle_core
+drawable circle_glow_pulse
 drawable design_fab_background
 drawable design_ic_visibility
 drawable design_ic_visibility_off
 drawable design_password_eye
 drawable design_snackbar_background
+drawable gradient_bottom_overlay
+drawable gradient_top_overlay
 drawable ic_arrow_back_black_24
 drawable ic_call_answer
 drawable ic_call_answer_low
@@ -3178,6 +3182,7 @@ id btnToggle
 id buttonPanel
 id cache_measures
 id callMeasure
+id cameraPreview
 id cancel_button
 id carryVelocity
 id center
@@ -3499,6 +3504,8 @@ id startToEnd
 id startVertical
 id staticLayout
 id staticPostLayout
+id statusCard
+id statusPulse
 id stop
 id stretch
 id submenuarrow
@@ -3534,7 +3541,6 @@ id textinput_helper_text
 id textinput_placeholder
 id textinput_prefix_text
 id textinput_suffix_text
-id textureView
 id time
 id title
 id titleDividerNoCustom
@@ -3551,6 +3557,7 @@ id transition_position
 id transition_scene_layoutid_cache
 id transition_transform
 id triangle
+id tvRecBadge
 id tvStatus
 id unchecked
 id uniform

@@ -9,6 +9,7 @@ import android.media.MediaFormat
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
+import android.view.TextureView
 import android.util.Log
 import java.io.OutputStream
 import java.net.ServerSocket
@@ -23,13 +24,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  1. Camera2 → captures preview frames from back camera
  *  2. MediaCodec → encodes frames as H.264 Annex-B
  *  3. TCP Server on port 8080 → streams the H.264 bitstream to any connected client
+ *  4. Optional TextureView preview surface for in-app camera preview
  *
  * Lifecycle: call start() to begin, stop() to tear down.
  * The statusCallback is invoked on changes (camera open, client connect, errors).
  */
 class CameraStreamer(
     private val context: Context,
-    private val textureView: android.view.TextureView,
     private val statusCallback: (String) -> Unit
 ) {
 
@@ -61,6 +62,9 @@ class CameraStreamer(
 
     private val running = AtomicBoolean(false)
 
+    // Optional preview TextureView — if set, camera will also send frames there
+    private var previewTextureView: TextureView? = null
+
     // Threads
     private var cameraThread: HandlerThread? = null
     private var cameraHandler: Handler? = null
@@ -90,6 +94,14 @@ class CameraStreamer(
     // ─────────────────────────────────────────────────────────────────────────
     // Public API
     // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Set the TextureView used for live camera preview.
+     * Must be called before start() to take effect.
+     */
+    fun setPreviewTextureView(textureView: TextureView) {
+        previewTextureView = textureView
+    }
 
     fun start() {
         if (running.getAndSet(true)) return
@@ -286,20 +298,16 @@ class CameraStreamer(
     private fun createCaptureSession(camera: CameraDevice) {
         val encoderSurface = encoderInputSurface ?: return
 
-        // Set up the local preview surface from the TextureView
-        val texture = textureView.surfaceTexture
-        val previewSurface = if (texture != null) {
-            texture.setDefaultBufferSize(VIDEO_WIDTH, VIDEO_HEIGHT)
-            Surface(texture)
-        } else {
-            null
-        }
+        // Build list of output surfaces: encoder + optional preview
+        val outputSurfaces = mutableListOf(encoderSurface)
 
-        // Configure both output surfaces
-        val outputSurfaces = mutableListOf<Surface>().apply {
-            add(encoderSurface)
-            if (previewSurface != null) add(previewSurface)
+        // Add TextureView preview surface if available and ready
+        val previewSurface: Surface? = previewTextureView?.let { tv ->
+            val st = tv.surfaceTexture ?: return@let null
+            st.setDefaultBufferSize(VIDEO_WIDTH, VIDEO_HEIGHT)
+            Surface(st)
         }
+        previewSurface?.let { outputSurfaces.add(it) }
 
         camera.createCaptureSession(
             outputSurfaces,
@@ -307,10 +315,10 @@ class CameraStreamer(
                 override fun onConfigured(session: CameraCaptureSession) {
                     captureSession = session
 
-                    // Build a repeating capture request targeting both encoder and preview surfaces
+                    // Build a repeating capture request targeting encoder + preview surfaces
                     val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                         addTarget(encoderSurface)
-                        if (previewSurface != null) addTarget(previewSurface)
+                        previewSurface?.let { addTarget(it) }
 
                         // ─── TUNE: AE / AF modes ─────────────────────────────────────
                         set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
@@ -321,7 +329,7 @@ class CameraStreamer(
                     }.build()
 
                     session.setRepeatingRequest(request, null, cameraHandler)
-                    Log.i(TAG, "Capture session configured — encoding + preview started")
+                    Log.i(TAG, "Capture session configured — encoding started with preview=${previewSurface != null}")
                     statusCallback("Camera ready — waiting for PC to connect…")
                 }
 

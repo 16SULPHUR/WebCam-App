@@ -84,11 +84,12 @@
   will-change: transform;
 }
 
-/* Orientation classes — applied by stream.js */
-.feed-img.rot-0   { transform: rotate(0deg)   scale(1); }
-.feed-img.rot-90  { transform: rotate(90deg)  scale(var(--rot-scale, 0.5625)); }
-.feed-img.rot-180 { transform: rotate(180deg) scale(1); }
-.feed-img.rot-270 { transform: rotate(270deg) scale(var(--rot-scale, 0.5625)); }
+/* Orientation classes — rotation is now server-side via FFmpeg.
+   These rules are kept for backward-compatibility but not used. */
+/* .feed-img.rot-0   { transform: rotate(0deg)   scale(1); } */
+/* .feed-img.rot-90  { transform: rotate(90deg)  scale(var(--rot-scale, 0.5625)); } */
+/* .feed-img.rot-180 { transform: rotate(180deg) scale(1); } */
+/* .feed-img.rot-270 { transform: rotate(270deg) scale(var(--rot-scale, 0.5625)); } */
 
 .feed-placeholder {
   position: absolute; inset: 0;

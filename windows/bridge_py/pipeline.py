@@ -1,0 +1,449 @@
+"""
+pipeline.py — Manages FFmpeg VCam + Web MJPEG processes and Python frame_sender.
+
+Responsibilities:
+  - Spawn and kill FFmpeg VCam (h264 → BGR24 → pyvirtualcam)
+  - Spawn and kill FFmpeg Web  (h264 → MJPEG → HTTP)
+  - Spawn and kill Python frame_sender.py
+  - Fan incoming H.264 data to both FFmpeg stdin pipes
+  - Track decoded frame count for stats
+  - Implement VCam failure circuit-breaker (disable after N fast failures)
+  - Expose restart() for config changes and reconnect
+"""
+
+import subprocess
+import threading
+import time
+import sys
+from typing import Optional, Callable
+
+from .broadcaster import EventBroadcaster
+from .config import ConfigManager
+from .ffmpeg_utils import build_vcam_args, build_web_args
+from .recorder import RecordingManager
+
+
+# ── Tuning constants ──────────────────────────────────────────────────────────
+PIPELINE_RESTART_DELAY  = 1.5    # seconds before pipeline respawns
+VCAM_MAX_FAILURES       = 3      # max fast VCam failures before disabling
+VCAM_FAILURE_WINDOW     = 15.0   # seconds — failures within this window count
+
+
+class Pipeline:
+    """
+    Lifecycle:
+        pipeline.start()   → spawn FFmpeg + Python, connect TCP fan-out
+        pipeline.stop()    → kill all subprocesses gracefully
+        pipeline.restart() → stop + start (after a delay)
+        pipeline.feed(b)   → send H.264 bytes to FFmpeg stdin pipes
+    """
+
+    def __init__(
+        self,
+        config:      ConfigManager,
+        broadcaster: EventBroadcaster,
+        recorder:    RecordingManager,
+        ffmpeg_path: str,
+        python_path: str,
+        script_path: str,
+        base_dir:    str,
+    ) -> None:
+        self._cfg     = config
+        self._bc      = broadcaster
+        self._rec     = recorder
+        self._ffmpeg  = ffmpeg_path
+        self._python  = python_path
+        self._script  = script_path
+        self._base    = base_dir
+
+        self._on_stop: Optional[Callable[[], None]] = None
+
+        self._lock          = threading.Lock()
+        self._vcam_proc: Optional[subprocess.Popen] = None
+        self._web_proc:  Optional[subprocess.Popen] = None
+        self._py_proc:   Optional[subprocess.Popen] = None
+
+        self._running   = False
+        self._restarting = False
+
+        # Frame counting
+        self._stdout_bytes  = 0
+        self._frame_size    = 1280 * 720 * 3  # updated on start
+        self._decoded_frames = 0
+
+        # VCam circuit-breaker
+        self._vcam_failures      = 0
+        self._vcam_last_fail_ts  = 0.0
+        self._vcam_disabled      = False
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    def start(self) -> None:
+        """Spawn all subprocesses."""
+        with self._lock:
+            if self._running:
+                return
+            self._running = True
+        self._spawn()
+
+    def stop(self, reason: str = "Requested") -> None:
+        """Kill all subprocesses and mark as stopped."""
+        with self._lock:
+            self._running = False
+        self._kill_all(reason)
+
+    def restart(self, reason: str = "Config change") -> None:
+        """Stop → wait → start. Safe to call from any thread."""
+        if self._restarting:
+            return
+        self._restarting = True
+        self._bc.broadcast_log("node", f"[Pipeline] Restarting: {reason}")
+        self._kill_all(reason)
+        time.sleep(PIPELINE_RESTART_DELAY)
+        self._restarting = False
+        if self._running:
+            self._spawn()
+
+    def feed(self, chunk: bytes) -> None:
+        """Pipe an H.264 chunk to both FFmpeg processes and optional recorder."""
+        # VCam FFmpeg
+        proc = self._vcam_proc
+        if proc and proc.poll() is None:
+            try:
+                proc.stdin.write(chunk)
+                proc.stdin.flush()
+            except Exception:
+                pass
+
+        # Web FFmpeg
+        proc = self._web_proc
+        if proc and proc.poll() is None:
+            try:
+                proc.stdin.write(chunk)
+                proc.stdin.flush()
+            except Exception:
+                pass
+
+        # Recorder
+        self._rec.feed(chunk)
+
+        # Frame counting (based on VCam BGR24 output bytes)
+        self._stdout_bytes = 0  # reset handled in stdout reader
+
+    @property
+    def vcam_active(self) -> bool:
+        p = self._py_proc
+        return p is not None and p.poll() is None
+
+    @property
+    def decoded_frames(self) -> int:
+        return self._decoded_frames
+
+    def set_on_stop(self, callback: Callable[[], None]) -> None:
+        self._on_stop = callback
+
+    # ── Internal spawn / kill ──────────────────────────────────────────────────
+
+    def _spawn(self) -> None:
+        cfg = self._cfg.to_dict()
+        width, height     = self._cfg.get_dimensions()
+        mirror            = bool(cfg.get("mirror"))
+        orientation       = int(cfg.get("orientation", 0))
+        vcam_enabled      = bool(cfg.get("vcamEnabled", True)) and not self._vcam_disabled
+        zoom              = float(cfg.get("zoom", 1.0))
+        brightness        = float(cfg.get("brightness", 0.0))
+        contrast          = float(cfg.get("contrast", 1.0))
+        saturation        = float(cfg.get("saturation", 1.0))
+        sharpness         = float(cfg.get("sharpness", 0.0))
+        target_fps        = int(cfg.get("targetFps", 30))
+
+        # Rotated output dimensions for VCam
+        rot = int(orientation)
+        py_w = height if rot in (90, 270) else width
+        py_h = width  if rot in (90, 270) else height
+        self._frame_size = py_w * py_h * 3
+        self._decoded_frames = 0
+        self._stdout_bytes   = 0
+
+        print(f"[Pipeline] Starting - VCam={width}x{height}->{py_w}x{py_h}, "
+              f"Mirror={mirror}, Ori={orientation} deg, Zoom={zoom}x, "
+              f"FPS={target_fps}, Brightness={brightness}, "
+              f"Contrast={contrast}, Saturation={saturation}, Sharpness={sharpness}")
+
+        # ── FFmpeg VCam ──────────────────────────────────────────────────────
+        vcam_args = build_vcam_args(
+            self._ffmpeg, width, height,
+            mirror, orientation, zoom,
+            brightness, contrast, saturation, sharpness, target_fps,
+        )
+        self._vcam_proc = subprocess.Popen(
+            vcam_args,
+            bufsize=0,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        threading.Thread(
+            target=self._drain_vcam_stdout,
+            args=(self._vcam_proc, py_w, py_h),
+            daemon=True, name="VcamStdout",
+        ).start()
+        threading.Thread(
+            target=self._drain_stderr,
+            args=(self._vcam_proc, "FFmpeg-VCam"),
+            daemon=True, name="VcamStderr",
+        ).start()
+        threading.Thread(
+            target=self._watch_vcam_proc,
+            args=(self._vcam_proc,),
+            daemon=True, name="VcamWatch",
+        ).start()
+
+        # ── FFmpeg Web ───────────────────────────────────────────────────────
+        web_args = build_web_args(
+            self._ffmpeg, mirror, orientation, zoom,
+            brightness, contrast, saturation, sharpness, target_fps,
+        )
+        self._web_proc = subprocess.Popen(
+            web_args,
+            bufsize=0,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        threading.Thread(
+            target=self._drain_web_stdout,
+            args=(self._web_proc,),
+            daemon=True, name="WebStdout",
+        ).start()
+        threading.Thread(
+            target=self._drain_stderr,
+            args=(self._web_proc, "FFmpeg-Web"),
+            daemon=True, name="WebStderr",
+        ).start()
+        threading.Thread(
+            target=self._watch_web_proc,
+            args=(self._web_proc,),
+            daemon=True, name="WebWatch",
+        ).start()
+
+        # ── Python frame_sender (VCam) ───────────────────────────────────────
+        if vcam_enabled:
+            self._py_proc = subprocess.Popen(
+                [self._python, self._script, str(py_w), str(py_h)],
+                bufsize=0,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            threading.Thread(
+                target=self._drain_py_stdout,
+                args=(self._py_proc,),
+                daemon=True, name="PyStdout",
+            ).start()
+            threading.Thread(
+                target=self._drain_stderr,
+                args=(self._py_proc, "python"),
+                daemon=True, name="PyStderr",
+            ).start()
+            threading.Thread(
+                target=self._watch_py_proc,
+                args=(self._py_proc, py_w, py_h),
+                daemon=True, name="PyWatch",
+            ).start()
+        else:
+            if self._vcam_disabled:
+                print("[Pipeline] VCam disabled after repeated failures - skipping Python.")
+            else:
+                print("[Pipeline] VCam disabled by user config - skipping Python.")
+
+        self._bc.update_stats(vcamActive=vcam_enabled)
+        self._bc.broadcast_status()
+        print("[Pipeline] Ready - waiting for frames from Android...")
+
+    def _kill_all(self, reason: str = "") -> None:
+        if reason:
+            print(f"[Pipeline] Stopping: {reason}")
+
+        if self._on_stop:
+            try:
+                self._on_stop()
+            except Exception:
+                pass
+
+        # Kill VCam FFmpeg
+        proc = self._vcam_proc
+        self._vcam_proc = None
+        if proc:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+        # Kill Web FFmpeg
+        proc = self._web_proc
+        self._web_proc = None
+        if proc:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+        # Kill Python
+        proc = self._py_proc
+        self._py_proc = None
+        if proc:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+        self._bc.update_stats(vcamActive=False)
+
+    # ── Stdout drains ──────────────────────────────────────────────────────────
+
+    def _drain_vcam_stdout(
+        self, proc: subprocess.Popen, py_w: int, py_h: int
+    ) -> None:
+        """
+        Read BGR24 frames from VCam FFmpeg stdout and forward to Python frame_sender.
+        Also counts decoded frames for the dashboard stats.
+        """
+        frame_size  = py_w * py_h * 3
+        local_bytes = 0
+        buf         = b""
+
+        while proc.poll() is None:
+            try:
+                chunk = proc.stdout.read(65536)
+                if not chunk:
+                    break
+            except Exception:
+                break
+
+            # Forward to Python frame_sender
+            py = self._py_proc
+            if py and py.poll() is None:
+                try:
+                    py.stdin.write(chunk)
+                    py.stdin.flush()
+                except Exception:
+                    pass
+
+            # Frame count
+            local_bytes += len(chunk)
+            frames_done  = local_bytes // frame_size
+            if frames_done > 0:
+                self._decoded_frames += frames_done
+                local_bytes = local_bytes % frame_size
+                self._bc.update_stats(decodedFrames=self._decoded_frames)
+                self._bc.broadcast_status()
+
+    def _drain_web_stdout(self, proc: subprocess.Popen) -> None:
+        """Forward MJPEG bytes from Web FFmpeg stdout to all connected video clients."""
+        while proc.poll() is None:
+            try:
+                chunk = proc.stdout.read(65536)
+                if not chunk:
+                    break
+                self._bc.send_video_chunk(chunk)
+            except Exception:
+                break
+
+    def _drain_py_stdout(self, proc: subprocess.Popen) -> None:
+        """Forward Python frame_sender stdout to the dashboard log."""
+        try:
+            for raw in proc.stdout:
+                msg = raw.decode(errors="replace").strip()
+                if msg:
+                    print(msg)
+                    self._bc.broadcast_log("python", msg)
+        except Exception:
+            pass
+
+    def _drain_stderr(self, proc: subprocess.Popen, label: str) -> None:
+        """Forward FFmpeg/Python stderr to dashboard log (line by line)."""
+        try:
+            for raw in proc.stderr:
+                msg = raw.decode(errors="replace").strip()
+                if msg:
+                    self._bc.broadcast_log("node", f"[{label}] {msg}")
+        except Exception:
+            pass
+
+    # ── Process watchers ──────────────────────────────────────────────────────
+
+    def _watch_vcam_proc(self, proc: subprocess.Popen) -> None:
+        code = proc.wait()
+        if proc is not self._vcam_proc:
+            return  # stale reference — we've already restarted
+        if self._running and not self._restarting:
+            self._trigger_restart(f"FFmpeg VCam exited (code {code})")
+
+    def _watch_web_proc(self, proc: subprocess.Popen) -> None:
+        code = proc.wait()
+        if proc is not self._web_proc:
+            return
+        if self._running and not self._restarting:
+            self._trigger_restart(f"FFmpeg Web exited (code {code})")
+
+    def _watch_py_proc(
+        self, proc: subprocess.Popen, py_w: int, py_h: int
+    ) -> None:
+        code = proc.wait()
+        if proc is not self._py_proc:
+            return  # stale reference
+        if self._running and not self._restarting:
+            self._handle_vcam_failure(code)
+
+    # ── VCam circuit-breaker ──────────────────────────────────────────────────
+
+    def _handle_vcam_failure(self, code: int) -> None:
+        if code == 0:
+            self._vcam_failures = 0
+            return
+
+        now = time.monotonic()
+        if now - self._vcam_last_fail_ts < VCAM_FAILURE_WINDOW:
+            self._vcam_failures += 1
+        else:
+            self._vcam_failures = 1
+        self._vcam_last_fail_ts = now
+
+        print(f"[Python] [WARN] VCam failure {self._vcam_failures}/{VCAM_MAX_FAILURES} - code {code}")
+
+        if self._vcam_failures >= VCAM_MAX_FAILURES:
+            self._vcam_disabled = True
+            self._cfg.update({"vcamEnabled": False})
+            msg = ("[ERROR] VCam disabled - OBS Virtual Camera not available. "
+                   "Make sure OBS -> Virtual Camera is STARTED before launching. "
+                   "Web preview still running. Restart bridge to retry.")
+            print(f"[Python] {msg}")
+            self._bc.broadcast_log("node", msg)
+            self._bc.update_stats(vcamActive=False)
+            self._bc.broadcast_status()
+            # Do NOT restart the whole pipeline — web preview keeps running
+            return
+
+        # Trigger full restart for transient failures
+        self._trigger_restart(f"Python VCam exited (code {code})")
+
+    def _trigger_restart(self, reason: str) -> None:
+        threading.Thread(
+            target=self.restart,
+            args=(reason,),
+            daemon=True,
+            name="PipelineRestart",
+        ).start()

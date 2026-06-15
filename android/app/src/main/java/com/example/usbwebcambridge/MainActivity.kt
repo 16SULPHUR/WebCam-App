@@ -2,7 +2,11 @@ package com.example.usbwebcambridge
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.SurfaceTexture
 import android.os.Bundle
+import android.view.TextureView
+import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -10,9 +14,11 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 /**
- * MainActivity — single-screen UI with Start/Stop button and status text.
+ * MainActivity — Full-screen camera preview UI.
  *
- * Delegates all camera + encoding + streaming work to CameraStreamer.
+ * Streaming auto-starts when the Activity resumes (no manual button required).
+ * Shows live camera preview via TextureView while simultaneously encoding
+ * and sending H.264 over TCP to the Windows bridge.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -20,41 +26,60 @@ class MainActivity : AppCompatActivity() {
         private const val CAMERA_PERMISSION_REQUEST = 100
     }
 
-    private lateinit var btnToggle: Button
+    private lateinit var cameraPreview: TextureView
     private lateinit var tvStatus: TextView
+    private lateinit var tvRecBadge: TextView
+    private lateinit var btnToggle: Button   // hidden, kept for compat
     private lateinit var streamer: CameraStreamer
 
     private var isStreaming = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Make the activity full-screen and keep screen on while streaming
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         setContentView(R.layout.activity_main)
 
-        btnToggle = findViewById(R.id.btnToggle)
-        tvStatus  = findViewById(R.id.tvStatus)
-        val textureView: android.view.TextureView = findViewById(R.id.textureView)
+        cameraPreview = findViewById(R.id.cameraPreview)
+        tvStatus      = findViewById(R.id.tvStatus)
+        tvRecBadge    = findViewById(R.id.tvRecBadge)
+        btnToggle     = findViewById(R.id.btnToggle)
 
-        streamer = CameraStreamer(this, textureView) { status ->
-            // Status callback — runs on any thread, post to UI thread
-            runOnUiThread { tvStatus.text = status }
+        streamer = CameraStreamer(this) { status ->
+            runOnUiThread {
+                tvStatus.text = status
+                // Show LIVE badge when connected to PC
+                val isConnected = status.contains("streaming", ignoreCase = true) ||
+                                  status.contains("connected", ignoreCase = true)
+                tvRecBadge.visibility = if (isConnected) View.VISIBLE else View.GONE
+            }
         }
 
-        btnToggle.setOnClickListener {
-            if (!isStreaming) {
-                startStreaming()
-            } else {
-                stopStreaming()
+        // Wire up TextureView listener so we start streaming once the surface is ready
+        cameraPreview.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, w: Int, h: Int) {
+                // Surface is ready — attempt to start streaming
+                if (!isStreaming) {
+                    streamer.setPreviewTextureView(cameraPreview)
+                    startStreaming()
+                }
             }
+            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, w: Int, h: Int) {}
+            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean = true
+            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
         }
     }
 
     override fun onResume() {
         super.onResume()
-        if (!isStreaming) {
+        // If the TextureView is already available and we're not streaming, start now
+        if (!isStreaming && cameraPreview.isAvailable) {
+            streamer.setPreviewTextureView(cameraPreview)
             startStreaming()
         }
     }
-
 
     private fun startStreaming() {
         // Check camera permission at runtime (required for API 23+)
@@ -68,18 +93,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         isStreaming = true
-        btnToggle.text = "Stop Streaming"
-        tvStatus.text = "Starting…"
+        tvStatus.text = "Starting camera…"
         streamer.start()
     }
 
     private fun stopStreaming() {
-        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         isStreaming = false
-        btnToggle.text = "Start Streaming"
         tvStatus.text = "Stopped"
+        tvRecBadge.visibility = View.GONE
         streamer.stop()
     }
 
@@ -92,7 +114,7 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == CAMERA_PERMISSION_REQUEST &&
             grantResults.isNotEmpty() &&
             grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            // Permission granted — try starting again
+            // Permission granted — start streaming
             startStreaming()
         } else {
             tvStatus.text = "Camera permission denied"
@@ -101,6 +123,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (isStreaming) streamer.stop()
+        if (isStreaming) stopStreaming()
     }
 }

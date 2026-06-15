@@ -6,41 +6,55 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.viewbinding.ViewBinding;
 import androidx.viewbinding.ViewBindings;
 import com.example.usbwebcambridge.R;
+import com.google.android.material.card.MaterialCardView;
 import java.lang.NullPointerException;
 import java.lang.Override;
 import java.lang.String;
 
 public final class ActivityMainBinding implements ViewBinding {
   @NonNull
-  private final LinearLayout rootView;
+  private final CoordinatorLayout rootView;
 
   @NonNull
   public final Button btnToggle;
 
   @NonNull
-  public final TextureView textureView;
+  public final TextureView cameraPreview;
+
+  @NonNull
+  public final MaterialCardView statusCard;
+
+  @NonNull
+  public final View statusPulse;
+
+  @NonNull
+  public final TextView tvRecBadge;
 
   @NonNull
   public final TextView tvStatus;
 
-  private ActivityMainBinding(@NonNull LinearLayout rootView, @NonNull Button btnToggle,
-      @NonNull TextureView textureView, @NonNull TextView tvStatus) {
+  private ActivityMainBinding(@NonNull CoordinatorLayout rootView, @NonNull Button btnToggle,
+      @NonNull TextureView cameraPreview, @NonNull MaterialCardView statusCard,
+      @NonNull View statusPulse, @NonNull TextView tvRecBadge, @NonNull TextView tvStatus) {
     this.rootView = rootView;
     this.btnToggle = btnToggle;
-    this.textureView = textureView;
+    this.cameraPreview = cameraPreview;
+    this.statusCard = statusCard;
+    this.statusPulse = statusPulse;
+    this.tvRecBadge = tvRecBadge;
     this.tvStatus = tvStatus;
   }
 
   @Override
   @NonNull
-  public LinearLayout getRoot() {
+  public CoordinatorLayout getRoot() {
     return rootView;
   }
 
@@ -71,9 +85,27 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
-      id = R.id.textureView;
-      TextureView textureView = ViewBindings.findChildViewById(rootView, id);
-      if (textureView == null) {
+      id = R.id.cameraPreview;
+      TextureView cameraPreview = ViewBindings.findChildViewById(rootView, id);
+      if (cameraPreview == null) {
+        break missingId;
+      }
+
+      id = R.id.statusCard;
+      MaterialCardView statusCard = ViewBindings.findChildViewById(rootView, id);
+      if (statusCard == null) {
+        break missingId;
+      }
+
+      id = R.id.statusPulse;
+      View statusPulse = ViewBindings.findChildViewById(rootView, id);
+      if (statusPulse == null) {
+        break missingId;
+      }
+
+      id = R.id.tvRecBadge;
+      TextView tvRecBadge = ViewBindings.findChildViewById(rootView, id);
+      if (tvRecBadge == null) {
         break missingId;
       }
 
@@ -83,7 +115,8 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
-      return new ActivityMainBinding((LinearLayout) rootView, btnToggle, textureView, tvStatus);
+      return new ActivityMainBinding((CoordinatorLayout) rootView, btnToggle, cameraPreview,
+          statusCard, statusPulse, tvRecBadge, tvStatus);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

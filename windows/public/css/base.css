@@ -295,17 +295,209 @@ h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.4px; }
 }
 .adj-reset-all:hover { color: var(--text-main); background: rgba(255,255,255,0.07); }
 
-/* ── Main Grid ────────────────────────────────────────────────────────────── */
+/* ── Main Layout (Split Pane) ────────────────────────────────────────────── */
 #app-main {
-  flex: 1; padding: 24px 28px;
-  max-width: 1600px; width: 100%; margin: 0 auto;
-  display: grid;
-  grid-template-columns: 1.25fr 1fr;
-  gap: 20px;
+  flex: 1;
+  padding: 24px;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  gap: 24px;
 }
-@media (max-width: 1100px) { #app-main { grid-template-columns: 1fr; } }
+@media (max-width: 1024px) {
+  #app-main {
+    flex-direction: column;
+  }
+}
 
-#feed-column, #console-column { display: flex; flex-direction: column; gap: 20px; }
+#settings-panel {
+  width: 420px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 4px 40px rgba(0,0,0,0.25);
+  backdrop-filter: blur(20px);
+}
+@media (max-width: 1024px) {
+  #settings-panel {
+    width: 100%;
+  }
+}
+
+#preview-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ── Tabs Navigation ─────────────────────────────────────────────────────── */
+.settings-nav {
+  display: flex;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+.nav-tab {
+  flex: 1;
+  padding: 14px 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+}
+.nav-tab:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.02);
+}
+.nav-tab.active {
+  color: var(--accent-cyan);
+  border-bottom-color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.04);
+}
+
+/* ── Tab Container & Contents ────────────────────────────────────────────── */
+.tab-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+.tab-content {
+  display: none;
+  flex-direction: column;
+  gap: 20px;
+  height: 100%;
+}
+.tab-content.active {
+  display: flex;
+}
+
+/* ── Settings Sections & Rows ────────────────────────────────────────────── */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.settings-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.setting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.setting-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+.setting-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Action Grid (Quick Actions Tab) ─────────────────────────────────────── */
+.actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.action-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+  font-family: inherit;
+}
+.action-card svg {
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+.action-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+  transform: translateY(-2px);
+}
+.action-card:hover svg {
+  color: var(--accent-cyan);
+}
+.action-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+/* ── Hardware Zoom range ─────────────────────────────────────────────────── */
+.zoom-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.ctrl-range {
+  flex: 1;
+  height: 4px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  outline: none;
+}
+.ctrl-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ── Filter Tabs Container (inside Logs tab) ─────────────────────────────── */
+.filter-tabs-container {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 12px;
+}
 
 /* ── Toggle Switch ────────────────────────────────────────────────────────── */
 .switch { position: relative; display: inline-block; width: 38px; height: 21px; flex-shrink: 0; }
@@ -349,14 +541,4 @@ h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.4px; }
 }
 .icon-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); }
 
-/* Console Visibility Layout Toggles */
-.ctrl-btn.active {
-  background: rgba(6, 182, 212, 0.1) !important;
-  border-color: rgba(6, 182, 212, 0.3) !important;
-  color: var(--accent-cyan) !important;
-}
-
-#app-main.console-hidden {
-  grid-template-columns: 1fr;
-}
 
