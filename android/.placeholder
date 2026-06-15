@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Project-level build.gradle (Groovy DSL)
+    Defines top-level repositories and plugin versions.
+-->
+<project>
+    <!-- This is a placeholder — see android/build.gradle for Groovy DSL content -->
+</project>

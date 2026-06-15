@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USB Webcam Bridge Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --panel-bg: rgba(22, 30, 46, 0.75);
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-orange: #f59e0b;
+      --accent-rose: #f43f5e;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --terminal-bg: #030712;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Ambient background glow */
+    body::before {
+      content: '';
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, rgba(11, 15, 25, 0) 70%);
+      top: -100px;
+      left: -100px;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    body::after {
+      content: '';
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, rgba(11, 15, 25, 0) 70%);
+      bottom: -150px;
+      right: -150px;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    header {
+      padding: 24px 40px;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(11, 15, 25, 0.5);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 16px;
+      height: 16px;
+      background-color: var(--accent-cyan);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent-cyan);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(6, 182, 212, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--panel-border);
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--text-muted);
+    }
+
+    .status-dot.connected {
+      background-color: var(--accent-emerald);
+      box-shadow: 0 0 8px var(--accent-emerald);
+    }
+
+    .status-dot.connecting {
+      background-color: var(--accent-orange);
+      box-shadow: 0 0 8px var(--accent-orange);
+      animation: blink 1s infinite alternate;
+    }
+
+    @keyframes blink {
+      0% { opacity: 0.3; }
+      100% { opacity: 1; }
+    }
+
+    main {
+      flex: 1;
+      padding: 40px;
+      max-width: 1600px;
+      width: 100%;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 40px;
+    }
+
+    @media (max-width: 1024px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feed-container {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .feed-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .feed-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      color: var(--text-muted);
+      font-size: 14px;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .feed-placeholder svg {
+      width: 48px;
+      height: 48px;
+      stroke: var(--text-muted);
+      stroke-width: 1.5;
+      fill: none;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--panel-border);
+      padding: 16px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .stat-val {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .terminal-card {
+      height: 100%;
+      min-height: 500px;
+    }
+
+    .terminal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .filter-tabs {
+      display: flex;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid var(--panel-border);
+    }
+
+    .filter-btn {
+      padding: 6px 12px;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .filter-btn.active {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+    }
+
+    .filter-btn:hover:not(.active) {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .terminal-body {
+      flex: 1;
+      background-color: var(--terminal-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      overflow-y: auto;
+      max-height: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 12px;
+      animation: fadeIn 0.15s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4dp); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-time {
+      color: #555861;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .log-tag {
+      font-weight: 500;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 18px;
+    }
+
+    .log-tag.android { background-color: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
+    .log-tag.node { background-color: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+    .log-tag.python { background-color: rgba(245, 158, 11, 0.15); color: var(--accent-orange); }
+
+    .log-msg {
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .clear-btn {
+      padding: 6px 12px;
+      background: none;
+      border: 1px solid var(--panel-border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .clear-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Switch / Toggle styles */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--panel-border);
+      border-radius: 24px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .slider::before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-muted);
+      border-radius: 50%;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .switch input:checked + .slider {
+      background-color: rgba(6, 182, 212, 0.2);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+    }
+
+    .switch input:checked + .slider::before {
+      transform: translateX(20px);
+      background-color: var(--accent-cyan);
+    }
+
+    /* Select selector styles */
+    .premium-select {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+
+    .premium-select:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .premium-select:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+    }
+
+    .premium-select option {
+      background: var(--bg-color);
+      color: var(--text-main);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <div class="logo-icon"></div>
+      <h1>USB Webcam Bridge</h1>
+    </div>
+    <div class="status-badge">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Disconnected</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left Column -->
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+      <!-- Video Feed Card -->
+      <div class="card">
+        <div class="card-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><path d="M23 7a2 2 0 0 0-2.45-1.45L16 7V5a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l4.55 1.45A2 2 0 0 0 23 17V7z"/></svg>
+          Live Video Stream
+        </div>
+        
+        <div class="feed-container">
+          <div class="feed-placeholder" id="feed-placeholder">
+            <svg viewBox="0 0 24 24">
+              <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+              <line x1="7" y1="2" x2="7" y2="22"/>
+              <line x1="17" y1="2" x2="17" y2="22"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <line x1="2" y1="7" x2="7" y2="7"/>
+              <line x1="2" y1="17" x2="7" y2="17"/>
+              <line x1="17" y1="17" x2="22" y2="17"/>
+              <line x1="17" y1="7" x2="22" y2="7"/>
+            </svg>
+            Waiting for H.264 stream from Android phone...
+          </div>
+          <img class="feed-img" id="feed-img" src="" style="display: none;" alt="Webcam Feed">
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">H.264 Input</div>
+            <div class="stat-val" id="stat-h264" style="color: var(--accent-emerald);">0 KB</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Decoded Frames</div>
+            <div class="stat-val" id="stat-decoded" style="color: var(--accent-cyan);">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Virtual Camera</div>
+            <div class="stat-val" id="stat-vcam" style="color: var(--accent-orange);">OFF</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Camera Settings Card -->
+      <div class="card">
+        <div class="card-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Camera Controls
+        </div>
+        
+        <div style="display: flex; gap: 24px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+          <!-- Resolution Selector -->
+          <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 200px;">
+            <label for="resolution-select" style="font-size: 13px; color: var(--text-muted); font-weight: 500;">Video Format (Resolution)</label>
+            <select id="resolution-select" class="premium-select" onchange="updateConfig()">
+              <option value="auto">Automatic (Default)</option>
+              <option value="640x360">640 x 360</option>
+              <option value="640x480">640 x 480</option>
+              <option value="960x540">960 x 540</option>
+              <option value="1280x720">1280 x 720</option>
+              <option value="1280x960">1280 x 960</option>
+              <option value="1920x1080">1920 x 1080</option>
+              <option value="2560x1440">2560 x 1440</option>
+              <option value="3840x2160">3840 x 2160</option>
+            </select>
+          </div>
+
+          <!-- Mirror Switch -->
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--panel-border); padding: 14px 20px; border-radius: 12px; min-width: 200px; flex: 1;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="font-size: 14px; font-weight: 500;">Mirror Feed</span>
+              <span style="font-size: 11px; color: var(--text-muted);">Flip video horizontally</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="mirror-checkbox" onchange="updateConfig()">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Right Column (Terminal Card) -->
+    <div class="card terminal-card">
+      <div class="terminal-header">
+        <div class="card-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          Console Logs
+        </div>
+        <button class="clear-btn" onclick="clearLogs()">Clear</button>
+      </div>
+
+      <div class="filter-tabs">
+        <button class="filter-btn active" onclick="setFilter('all')">ALL</button>
+        <button class="filter-btn" onclick="setFilter('android')">Android</button>
+        <button class="filter-btn" onclick="setFilter('node')">Node App</button>
+        <button class="filter-btn" onclick="setFilter('python')">Python</button>
+      </div>
+
+      <div class="terminal-body" id="terminal">
+        <!-- Log lines will insert here -->
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let activeFilter = 'all';
+    const terminal = document.getElementById('terminal');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const feedImg = document.getElementById('feed-img');
+    const feedPlaceholder = document.getElementById('feed-placeholder');
+    
+    const statH264 = document.getElementById('stat-h264');
+    const statDecoded = document.getElementById('stat-decoded');
+    const statVcam = document.getElementById('stat-vcam');
+
+    // Load & Save config endpoints
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const config = await res.json();
+          document.getElementById('resolution-select').value = config.resolution || 'auto';
+          document.getElementById('mirror-checkbox').checked = !!config.mirror;
+          addLogLine('node', `Loaded config: resolution=${config.resolution}, mirror=${config.mirror}`);
+        }
+      } catch (err) {
+        addLogLine('node', `Failed to load config: ${err.message}`);
+      }
+    }
+
+    async function updateConfig() {
+      const resolution = document.getElementById('resolution-select').value;
+      const mirror = document.getElementById('mirror-checkbox').checked;
+      addLogLine('node', `Saving config: resolution=${resolution}, mirror=${mirror}...`);
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resolution, mirror })
+        });
+        if (res.ok) {
+          addLogLine('node', `Config saved successfully. Reinitializing pipeline...`);
+        } else {
+          addLogLine('node', `Failed to save config: ${res.statusText}`);
+        }
+      } catch (err) {
+        addLogLine('node', `Error saving config: ${err.message}`);
+      }
+    }
+
+    // Initialize config on load
+    loadConfig();
+
+    // Subscribe to SSE Logs
+    const logEventSource = new EventSource('/logs');
+
+    logEventSource.onopen = () => {
+      updateStatus('connecting', 'Connecting...');
+      addLogLine('node', 'Established connection to dashboard log stream.');
+    };
+
+    logEventSource.onerror = () => {
+      updateStatus('disconnected', 'Disconnected');
+      addLogLine('node', 'Log stream disconnected. Retrying...');
+    };
+
+    logEventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'log') {
+        addLogLine(data.source, data.message);
+      } else if (data.type === 'status') {
+        // Handle stream stats & health updates
+        if (data.androidConnected) {
+          updateStatus('connected', 'Streaming Active');
+          feedImg.src = '/video_feed?' + Date.now(); // reload to start MJPEG feed
+          feedImg.style.display = 'block';
+          feedPlaceholder.style.display = 'none';
+        } else {
+          updateStatus('connecting', 'Waiting for Stream');
+          feedImg.style.display = 'none';
+          feedPlaceholder.style.display = 'flex';
+          feedPlaceholder.innerHTML = `
+            <svg viewBox="0 0 24 24">
+              <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+              <line x1="7" y1="2" x2="7" y2="22"/>
+              <line x1="17" y1="2" x2="17" y2="22"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+            </svg>
+            Waiting for H.264 stream from Android phone...
+          `;
+        }
+
+        // Stats
+        if (data.h264ReceivedBytes !== undefined) {
+          statH264.innerText = (data.h264ReceivedBytes / 1024).toFixed(1) + ' KB';
+        }
+        if (data.decodedFrames !== undefined) {
+          statDecoded.innerText = data.decodedFrames;
+        }
+        if (data.vcamActive !== undefined) {
+          statVcam.innerText = data.vcamActive ? 'ON' : 'OFF';
+          statVcam.style.color = data.vcamActive ? 'var(--accent-emerald)' : 'var(--accent-orange)';
+        }
+      }
+    };
+
+    function updateStatus(state, text) {
+      statusDot.className = 'status-dot ' + state;
+      statusText.innerText = text;
+    }
+
+    function addLogLine(source, message) {
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.dataset.source = source;
+
+      if (activeFilter !== 'all' && activeFilter !== source) {
+        line.style.display = 'none';
+      }
+
+      const time = new Date().toLocaleTimeString();
+      line.innerHTML = `
+        <span class="log-time">${time}</span>
+        <span class="log-tag ${source}">${source}</span>
+        <span class="log-msg">${escapeHtml(message)}</span>
+      `;
+
+      terminal.appendChild(line);
+      terminal.scrollTop = terminal.scrollHeight;
+
+      // Limit logs in DOM to 200 lines to avoid memory leak
+      while (terminal.childElementCount > 200) {
+        terminal.removeChild(terminal.firstChild);
+      }
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function setFilter(filter) {
+      activeFilter = filter;
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText.toLowerCase() === filter || (filter === 'all' && btn.innerText === 'ALL') || (filter === 'node' && btn.innerText === 'Node App'));
+      });
+
+      document.querySelectorAll('.log-line').forEach(line => {
+        if (filter === 'all' || line.dataset.source === filter) {
+          line.style.display = 'flex';
+        } else {
+          line.style.display = 'none';
+        }
+      });
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function clearLogs() {
+      terminal.innerHTML = '';
+    }
+  </script>
+</body>
+</html>

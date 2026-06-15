@@ -1,0 +1,34 @@
+com.example.usbwebcambridge.app-lifecycle-livedata-core-2.6.1-0 C:\Users\Manish\.gradle\caches\transforms-3\0d45111abb1718800fe6a6449b14ed82\transformed\lifecycle-livedata-core-2.6.1\res
+com.example.usbwebcambridge.app-jetified-lifecycle-viewmodel-savedstate-2.6.1-1 C:\Users\Manish\.gradle\caches\transforms-3\0d9747cf89bf120e1d8666646a17f3ca\transformed\jetified-lifecycle-viewmodel-savedstate-2.6.1\res
+com.example.usbwebcambridge.app-jetified-appcompat-resources-1.6.1-2 C:\Users\Manish\.gradle\caches\transforms-3\23824d698053f929797791e301bf91f6\transformed\jetified-appcompat-resources-1.6.1\res
+com.example.usbwebcambridge.app-drawerlayout-1.1.1-3 C:\Users\Manish\.gradle\caches\transforms-3\3d657aac24a1bffd6d63383cfbe6b058\transformed\drawerlayout-1.1.1\res
+com.example.usbwebcambridge.app-jetified-profileinstaller-1.3.0-4 C:\Users\Manish\.gradle\caches\transforms-3\409acb17ac08d5bfd510839c885b2c33\transformed\jetified-profileinstaller-1.3.0\res
+com.example.usbwebcambridge.app-cardview-1.0.0-5 C:\Users\Manish\.gradle\caches\transforms-3\41566863bf103aff624e14bb88402f61\transformed\cardview-1.0.0\res
+com.example.usbwebcambridge.app-jetified-startup-runtime-1.1.1-6 C:\Users\Manish\.gradle\caches\transforms-3\47d1ac38417517385d7f60bda91e8c0a\transformed\jetified-startup-runtime-1.1.1\res
+com.example.usbwebcambridge.app-core-runtime-2.2.0-7 C:\Users\Manish\.gradle\caches\transforms-3\4f961319d4aed48586da84f3535dabf5\transformed\core-runtime-2.2.0\res
+com.example.usbwebcambridge.app-recyclerview-1.1.0-8 C:\Users\Manish\.gradle\caches\transforms-3\54254f9a3e184b1bb3adac8e02d68aa2\transformed\recyclerview-1.1.0\res
+com.example.usbwebcambridge.app-transition-1.2.0-9 C:\Users\Manish\.gradle\caches\transforms-3\641314942f6c7d030f4cf7b6bda25388\transformed\transition-1.2.0\res
+com.example.usbwebcambridge.app-constraintlayout-2.1.4-10 C:\Users\Manish\.gradle\caches\transforms-3\6de17af1fafef4018d975c87f851457b\transformed\constraintlayout-2.1.4\res
+com.example.usbwebcambridge.app-material-1.11.0-11 C:\Users\Manish\.gradle\caches\transforms-3\76947f2dda4873f4ff357d73f51effc0\transformed\material-1.11.0\res
+com.example.usbwebcambridge.app-jetified-savedstate-1.2.1-12 C:\Users\Manish\.gradle\caches\transforms-3\7f9e377c95b77b8b9feced6a92b68357\transformed\jetified-savedstate-1.2.1\res
+com.example.usbwebcambridge.app-lifecycle-runtime-2.6.1-13 C:\Users\Manish\.gradle\caches\transforms-3\874427ce2f2eb1dc883cc7a61e4e782e\transformed\lifecycle-runtime-2.6.1\res
+com.example.usbwebcambridge.app-coordinatorlayout-1.1.0-14 C:\Users\Manish\.gradle\caches\transforms-3\8de7845006d900ef2d34e7cec1e14c11\transformed\coordinatorlayout-1.1.0\res
+com.example.usbwebcambridge.app-appcompat-1.6.1-15 C:\Users\Manish\.gradle\caches\transforms-3\9280386eeb9849e58ccfe273753cebc6\transformed\appcompat-1.6.1\res
+com.example.usbwebcambridge.app-core-1.12.0-16 C:\Users\Manish\.gradle\caches\transforms-3\a02af45ee381eb3587200483e4a20c77\transformed\core-1.12.0\res
+com.example.usbwebcambridge.app-jetified-activity-1.8.0-17 C:\Users\Manish\.gradle\caches\transforms-3\a6a746c030d1f7443f088433ca6ba5c6\transformed\jetified-activity-1.8.0\res
+com.example.usbwebcambridge.app-jetified-lifecycle-process-2.6.1-18 C:\Users\Manish\.gradle\caches\transforms-3\add27fcee28415c4386ad3670db49e58\transformed\jetified-lifecycle-process-2.6.1\res
+com.example.usbwebcambridge.app-lifecycle-livedata-2.6.1-19 C:\Users\Manish\.gradle\caches\transforms-3\ae7b301c98c564d620a6afa69031980f\transformed\lifecycle-livedata-2.6.1\res
+com.example.usbwebcambridge.app-jetified-core-ktx-1.12.0-20 C:\Users\Manish\.gradle\caches\transforms-3\d06412960ba4d08e064a44c054c185c4\transformed\jetified-core-ktx-1.12.0\res
+com.example.usbwebcambridge.app-jetified-emoji2-views-helper-1.2.0-21 C:\Users\Manish\.gradle\caches\transforms-3\d5096ef4d9e320af8baa93cee5f8559c\transformed\jetified-emoji2-views-helper-1.2.0\res
+com.example.usbwebcambridge.app-fragment-1.3.6-22 C:\Users\Manish\.gradle\caches\transforms-3\d5b158ce8dd00f5664fc9571f8d1502c\transformed\fragment-1.3.6\res
+com.example.usbwebcambridge.app-jetified-annotation-experimental-1.3.0-23 C:\Users\Manish\.gradle\caches\transforms-3\ec262d5dd80ed8803f01a8338c2fb539\transformed\jetified-annotation-experimental-1.3.0\res
+com.example.usbwebcambridge.app-jetified-emoji2-1.2.0-24 C:\Users\Manish\.gradle\caches\transforms-3\ee1025cbc6c8bdae12388e839ec3fd6e\transformed\jetified-emoji2-1.2.0\res
+com.example.usbwebcambridge.app-lifecycle-viewmodel-2.6.1-25 C:\Users\Manish\.gradle\caches\transforms-3\f1bbd3b57b4092aea08b37f6a517a552\transformed\lifecycle-viewmodel-2.6.1\res
+com.example.usbwebcambridge.app-jetified-viewpager2-1.0.0-26 C:\Users\Manish\.gradle\caches\transforms-3\f455f38a936a495263cfc7976c398971\transformed\jetified-viewpager2-1.0.0\res
+com.example.usbwebcambridge.app-pngs-27 F:\PROGRAMING\WebCam App\android\app\build\generated\res\pngs\debug
+com.example.usbwebcambridge.app-resValues-28 F:\PROGRAMING\WebCam App\android\app\build\generated\res\resValues\debug
+com.example.usbwebcambridge.app-packageDebugResources-29 F:\PROGRAMING\WebCam App\android\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.example.usbwebcambridge.app-packageDebugResources-30 F:\PROGRAMING\WebCam App\android\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.example.usbwebcambridge.app-merged_res-31 F:\PROGRAMING\WebCam App\android\app\build\intermediates\merged_res\debug
+com.example.usbwebcambridge.app-debug-32 F:\PROGRAMING\WebCam App\android\app\src\debug\res
+com.example.usbwebcambridge.app-main-33 F:\PROGRAMING\WebCam App\android\app\src\main\res

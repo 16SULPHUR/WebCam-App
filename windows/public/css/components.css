@@ -1,0 +1,159 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   components.css — Cards, feed, stats, stream health
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.card {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 40px rgba(0,0,0,0.25);
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+.card-title {
+  font-size: 14px; font-weight: 600; color: var(--text-main);
+  display: flex; align-items: center; gap: 8px;
+}
+
+.card-badge {
+  margin-left: auto;
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; padding: 2px 8px; border-radius: 20px;
+  background: rgba(244,63,94,0.15); color: var(--accent-rose);
+  border: 1px solid rgba(244,63,94,0.3);
+  transition: all 0.3s ease;
+}
+.card-badge.live {
+  background: rgba(16,185,129,0.15); color: var(--accent-emerald);
+  border-color: rgba(16,185,129,0.35);
+  animation: badge-pulse 2.5s infinite;
+}
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+  50%       { box-shadow: 0 0 8px 2px rgba(16,185,129,0.25); }
+}
+
+/* Recording indicator in card title */
+.rec-indicator {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.8px;
+  color: var(--accent-red);
+}
+.rec-dot-blink {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent-red);
+  animation: rec-blink 1s infinite;
+}
+@keyframes rec-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+/* ── Video Feed ───────────────────────────────────────────────────────────── */
+.feed-container {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #000;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* Wrapper so transform doesn't overflow the container */
+.feed-img-wrapper {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.feed-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  /* transform-origin center so rotation works correctly */
+  transform-origin: center center;
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), filter 0.2s ease;
+  will-change: transform;
+}
+
+/* Orientation classes — applied by stream.js */
+.feed-img.rot-0   { transform: rotate(0deg)   scale(1); }
+.feed-img.rot-90  { transform: rotate(90deg)  scale(var(--rot-scale, 0.5625)); }
+.feed-img.rot-180 { transform: rotate(180deg) scale(1); }
+.feed-img.rot-270 { transform: rotate(270deg) scale(var(--rot-scale, 0.5625)); }
+
+.feed-placeholder {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  gap: 14px; color: var(--text-muted);
+  font-size: 14px; text-align: center; padding: 24px;
+  background: linear-gradient(135deg, rgba(6,182,212,0.03) 0%, transparent 60%);
+}
+.placeholder-icon {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--panel-border);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 4px;
+}
+.placeholder-icon svg { stroke: var(--text-muted); }
+.placeholder-sub {
+  font-size: 12px; color: var(--text-muted); opacity: 0.6;
+  max-width: 280px; line-height: 1.5;
+}
+
+/* FPS overlay */
+.feed-overlay {
+  position: absolute; bottom: 10px; right: 12px;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px; padding: 3px 10px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--accent-emerald); pointer-events: none;
+}
+
+/* ── Stream Health ─────────────────────────────────────────────────────────── */
+#stream-health {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+
+.health-item { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 110px; }
+.health-label {
+  font-size: 10px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+}
+.health-bar-track {
+  flex: 1; height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px; overflow: hidden;
+}
+.health-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-emerald), var(--accent-cyan));
+  border-radius: 3px; transition: width 0.6s ease;
+}
+.health-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600; color: var(--text-main); white-space: nowrap;
+}
+
+/* ── Fullscreen ────────────────────────────────────────────────────────────── */
+#feed-container.fullscreen-mode {
+  position: fixed; inset: 0; z-index: 9999;
+  width: 100vw !important; height: 100vh !important;
+  aspect-ratio: unset; border-radius: 0; border: none;
+}

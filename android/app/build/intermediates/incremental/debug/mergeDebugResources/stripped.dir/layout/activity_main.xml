@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    activity_main.xml
+    Single screen: status label, big status text, Start/Stop button.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp"
+    android:background="#121212">
+
+    <!-- App title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="USB Webcam Bridge"
+        android:textSize="24sp"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Streams back camera over USB to Windows"
+        android:textSize="13sp"
+        android:textColor="#AAAAAA"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Camera Preview View -->
+    <TextureView
+        android:id="@+id/textureView"
+        android:layout_width="320dp"
+        android:layout_height="180dp"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Status display -->
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Idle — tap Start to begin"
+        android:textSize="15sp"
+        android:textColor="#BB86FC"
+        android:gravity="center"
+        android:minHeight="80dp"
+        android:layout_marginBottom="40dp"
+        android:padding="12dp"
+        android:background="#1E1E1E" />
+
+    <!-- Start / Stop button (hidden as requested, streaming auto-starts) -->
+    <Button
+        android:id="@+id/btnToggle"
+        android:layout_width="240dp"
+        android:layout_height="56dp"
+        android:text="Start Streaming"
+        android:textSize="16sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#6200EE"
+        android:visibility="gone" />
+
+</LinearLayout>
