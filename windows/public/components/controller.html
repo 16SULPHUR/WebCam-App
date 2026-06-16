@@ -1,0 +1,157 @@
+<div class="controller-board">
+  
+  <!-- 1. Top Section: Compact Preview & Status -->
+  <div class="controller-preview-box" id="controller-preview-box" onclick="Stream.toggleFullscreen()">
+    <div class="controller-preview-header">
+      <span class="ctrl-header-label">📺 PC Stream Live Feed</span>
+      <span class="ctrl-tap-hint">Tap for Fullscreen</span>
+    </div>
+    
+    <div class="controller-video-container" id="controller-feed-img-wrapper">
+      <!-- The #feed-img and overlays will be moved here dynamically in app.js -->
+    </div>
+  </div>
+
+  <!-- 2. Controls Grid: Sliders / Faders -->
+  <div class="controller-faders-grid">
+    
+    <!-- Brightness Fader -->
+    <div class="controller-fader-card card-yellow">
+      <div class="fader-label-container">
+        <span class="fader-title">Brightness</span>
+        <span id="controller-brightness-val" class="fader-value">0.00</span>
+      </div>
+      <div class="fader-groove-container">
+        <div class="fader-ticks"></div>
+        <input type="range" id="controller-brightness-range" min="-1.0" max="1.0" step="0.05" value="0.0" class="controller-fader-input" oninput="Config.onProcessingChange()">
+      </div>
+      <button class="fader-reset-btn" onclick="Config.resetSingle('brightness')">Reset</button>
+    </div>
+
+    <!-- Contrast Fader -->
+    <div class="controller-fader-card card-cyan">
+      <div class="fader-label-container">
+        <span class="fader-title">Contrast</span>
+        <span id="controller-contrast-val" class="fader-value">1.00</span>
+      </div>
+      <div class="fader-groove-container">
+        <div class="fader-ticks"></div>
+        <input type="range" id="controller-contrast-range" min="0.5" max="2.0" step="0.05" value="1.0" class="controller-fader-input" oninput="Config.onProcessingChange()">
+      </div>
+      <button class="fader-reset-btn" onclick="Config.resetSingle('contrast')">Reset</button>
+    </div>
+
+    <!-- Saturation Fader -->
+    <div class="controller-fader-card card-purple">
+      <div class="fader-label-container">
+        <span class="fader-title">Saturation</span>
+        <span id="controller-saturation-val" class="fader-value">1.00</span>
+      </div>
+      <div class="fader-groove-container">
+        <div class="fader-ticks"></div>
+        <input type="range" id="controller-saturation-range" min="0.0" max="2.0" step="0.05" value="1.0" class="controller-fader-input" oninput="Config.onProcessingChange()">
+      </div>
+      <button class="fader-reset-btn" onclick="Config.resetSingle('saturation')">Reset</button>
+    </div>
+
+    <!-- Sharpness Fader -->
+    <div class="controller-fader-card card-green">
+      <div class="fader-label-container">
+        <span class="fader-title">Sharpness</span>
+        <span id="controller-sharpness-val" class="fader-value">0.0</span>
+      </div>
+      <div class="fader-groove-container">
+        <div class="fader-ticks"></div>
+        <input type="range" id="controller-sharpness-range" min="0.0" max="2.0" step="0.1" value="0.0" class="controller-fader-input" oninput="Config.onProcessingChange()">
+      </div>
+      <button class="fader-reset-btn" onclick="Config.resetSingle('sharpness')">Reset</button>
+    </div>
+
+    <!-- Background Blur Fader -->
+    <div class="controller-fader-card card-red">
+      <div class="fader-label-container">
+        <span class="fader-title">Blur</span>
+        <span id="controller-blur-val" class="fader-value">Off</span>
+      </div>
+      <div class="fader-groove-container">
+        <div class="fader-ticks"></div>
+        <input type="range" id="controller-blur-range" min="0" max="25" step="1" value="0" class="controller-fader-input" oninput="Config.onProcessingChange()">
+      </div>
+      <button class="fader-reset-btn" onclick="Config.resetSingle('blur')">Reset</button>
+    </div>
+
+  </div>
+
+  <!-- 3. Hardware Rotary Zoom and Toggle Panel -->
+  <div class="controller-rotary-panel">
+    
+    <!-- Zoom Rotary Card -->
+    <div class="controller-knob-card">
+      <span class="knob-title">Hardware Zoom</span>
+      <div class="rotary-knob-outer">
+        <div class="rotary-ticks"></div>
+        <div class="rotary-knob" id="zoom-rotary-knob">
+          <div class="rotary-indicator"></div>
+        </div>
+      </div>
+      <div class="knob-slider-container">
+        <input type="range" id="controller-zoom-select" min="1.0" max="3.0" step="0.1" value="1.0" class="controller-range-input" oninput="Config.onZoomChange(this.value)">
+        <span id="controller-zoom-val" class="knob-value-label">1.0x</span>
+      </div>
+    </div>
+
+    <!-- Mechanical Feature Toggles -->
+    <div class="controller-toggles-card">
+      <span class="toggles-title">System Features</span>
+      
+      <!-- Mirror toggle -->
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">Mirror Feed</span>
+        <div class="mech-toggle-control">
+          <div class="status-led" id="led-mirror"></div>
+          <label class="switch-mech">
+            <input type="checkbox" id="controller-mirror-checkbox" onchange="Config.updateFromController()">
+            <span class="slider-mech"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- OBS VCam toggle -->
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">OBS VCam</span>
+        <div class="mech-toggle-control">
+          <div class="status-led" id="led-vcam"></div>
+          <label class="switch-mech">
+            <input type="checkbox" id="controller-vcam-checkbox" checked onchange="Config.updateFromController()">
+            <span class="slider-mech"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Recording toggle -->
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">Record MP4</span>
+        <div class="mech-toggle-control">
+          <div class="status-led led-red" id="led-record"></div>
+          <button class="mech-press-btn" id="controller-btn-record" onclick="Stream.toggleRecording()">
+            REC
+          </button>
+        </div>
+      </div>
+
+      <!-- Orientation selector -->
+      <div class="mech-toggle-row select-row">
+        <span class="mech-toggle-label">Orientation</span>
+        <select id="controller-orientation-select" class="ctrl-select ctrl-select-mech" onchange="Config.onOrientationChangeFromController()">
+          <option value="0">0°</option>
+          <option value="90">90°</option>
+          <option value="180">180°</option>
+          <option value="270">270°</option>
+        </select>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>

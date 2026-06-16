@@ -541,4 +541,79 @@ h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.4px; }
 }
 .icon-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); }
 
+/* ── Premium Sliders ──────────────────────────────────────────────────────── */
+.ctrl-range, .adj-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255,255,255,0.08) !important;
+  height: 6px !important;
+  border-radius: 3px !important;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.ctrl-range:hover, .adj-range:hover {
+  background: rgba(255,255,255,0.12) !important;
+}
+.ctrl-range::-webkit-slider-thumb, .adj-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-cyan) !important;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.4);
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+.ctrl-range::-webkit-slider-thumb:hover, .adj-range::-webkit-slider-thumb:hover {
+  background: #22d3ee !important;
+}
+.ctrl-range::-webkit-slider-thumb:active, .adj-range::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+
+/* ── Mobile Layout Optimization ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  #app-main {
+    padding: 12px !important;
+    gap: 16px !important;
+  }
+  .tab-container {
+    padding: 14px !important;
+  }
+  .settings-section {
+    gap: 12px !important;
+    padding-bottom: 14px !important;
+  }
+  .logo-container h1 {
+    font-size: 15px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  #app-header {
+    padding: 10px 14px !important;
+    gap: 8px !important;
+  }
+  .logo-icon {
+    width: 10px !important;
+    height: 10px !important;
+  }
+  /* Hide heavy detailed logs and sparkline on small mobile viewports */
+  .stat-badge[title="H.264 data received"],
+  .stat-badge[title="Decoded frames"],
+  #fps-sparkline {
+    display: none !important;
+  }
+  .stat-badge {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+  .status-badge {
+    padding: 4px 10px !important;
+    font-size: 11px !important;
+  }
+}
+
 

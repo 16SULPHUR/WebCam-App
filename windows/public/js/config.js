@@ -50,9 +50,9 @@ const Config = (() => {
       // Apply orientation (server-side now, no CSS)
       Stream.setOrientation(cfg.orientation || 0);
 
-      Terminal.addLine('system', `Config loaded: res=${cfg.resolution}, mirror=${cfg.mirror}, ori=${cfg.orientation}°, zoom=${zoom}x`);
+      console.log(`Config loaded: res=${cfg.resolution}, mirror=${cfg.mirror}, ori=${cfg.orientation}°, zoom=${zoom}x`);
     } catch (err) {
-      Terminal.addLine('system', `Failed to load config: ${err.message}`);
+      console.error(`Failed to load config: ${err.message}`);
     } finally {
       _loading = false;
     }
@@ -135,7 +135,7 @@ const Config = (() => {
     if (el('saturation-val')) el('saturation-val').textContent = '1.00';
     if (el('sharpness-val'))  el('sharpness-val').textContent  = '0.0';
     if (el('blur-val'))       el('blur-val').textContent       = 'Off';
-    Terminal.addLine('system', 'Processing reset to defaults - applying...');
+    console.log('Processing reset to defaults - applying...');
     update();
   }
 
@@ -157,7 +157,7 @@ const Config = (() => {
       targetFps:   parseInt(el('fps-select')?.value         || 30, 10),
     };
 
-    Terminal.addLine('system',
+    console.log(
       `Saving config: res=${payload.resolution}, mirror=${payload.mirror}, ` +
       `ori=${payload.orientation}°, zoom=${payload.zoom}x, fps=${payload.targetFps}, blur=${payload.blur}px`
     );
@@ -169,21 +169,24 @@ const Config = (() => {
         body:    JSON.stringify(payload),
       });
       if (res.ok) {
-        Terminal.addLine('system', '✓ Config saved — pipeline restarting…');
-        // Pipeline restart kills FFmpeg and spawns a new one.
-        // Force-reload the feed after a short delay so the browser opens a
-        // fresh HTTP connection to the new MJPEG stream.
-        setTimeout(() => {
-          const img = document.getElementById('feed-img');
-          if (img && img.style.display !== 'none') {
-            img.src = '/video_feed?' + Date.now();
-          }
-        }, 2500);
+        const json = await res.json();
+        if (json.restarted) {
+          Toast.show('✓ Resolution/FPS changed. Restarting pipeline...', 'info');
+          setTimeout(() => {
+            const img = document.getElementById('feed-img');
+            if (img && img.style.display !== 'none') {
+              img.src = '/video_feed?' + Date.now();
+            }
+          }, 2500);
+        } else {
+          Toast.show('✓ Settings applied dynamically.', 'success');
+        }
       } else {
-        Terminal.addLine('system', `Config save failed: ${res.statusText}`);
+        const errJson = await res.json().catch(() => ({}));
+        Toast.show(`⚠️ Config save failed: ${errJson.error || res.statusText}`, 'error');
       }
     } catch (err) {
-      Terminal.addLine('system', `Config error: ${err.message}`);
+      Toast.show(`Config error: ${err.message}`, 'error');
     }
   }
 

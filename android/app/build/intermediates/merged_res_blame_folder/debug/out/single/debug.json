@@ -1,5 +1,9 @@
 [
     {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_gradient_top_overlay.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\gradient_top_overlay.xml"
+    },
+    {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-xxxhdpi_ic_launcher.png.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-xxxhdpi\\ic_launcher.png"
     },
@@ -16,6 +20,10 @@
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-hdpi\\ic_launcher.png"
     },
     {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_gradient_bottom_overlay.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\gradient_bottom_overlay.xml"
+    },
+    {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_circle_core.xml.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\circle_core.xml"
     },
@@ -28,10 +36,6 @@
         "source": "com.example.usbwebcambridge.app-main-33:/layout/activity_main.xml"
     },
     {
-        "merged": "com.example.usbwebcambridge.app-merged_res-31:/drawable_gradient_top_overlay.xml.flat",
-        "source": "com.example.usbwebcambridge.app-main-33:/drawable/gradient_top_overlay.xml"
-    },
-    {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\layout_activity_main.xml.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\layout\\activity_main.xml"
     },
@@ -42,10 +46,6 @@
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-xhdpi_ic_launcher.png.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-xhdpi\\ic_launcher.png"
-    },
-    {
-        "merged": "com.example.usbwebcambridge.app-merged_res-31:/drawable_gradient_bottom_overlay.xml.flat",
-        "source": "com.example.usbwebcambridge.app-main-33:/drawable/gradient_bottom_overlay.xml"
     },
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-anydpi-v26_ic_launcher.xml.flat",

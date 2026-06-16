@@ -91,7 +91,20 @@ class EventBroadcaster:
     def broadcast_log(self, source: str, message: str) -> None:
         msg = message.strip()
         if msg:
-            self._broadcast_sse({"type": "log", "source": source, "message": msg})
+            import sys
+            # Replace old "node" stack label with "system"
+            display_source = "system" if source == "node" else source
+            # Print to server terminal console safely
+            try:
+                print(f"[{display_source.upper()}] {msg}", flush=True)
+            except Exception:
+                try:
+                    enc = sys.stdout.encoding or "utf-8"
+                    safe_msg = msg.encode(enc, errors="replace").decode(enc)
+                    print(f"[{display_source.upper()}] {safe_msg}", flush=True)
+                except Exception:
+                    pass
+            self._broadcast_sse({"type": "log", "source": display_source, "message": msg})
 
     def broadcast_status(self) -> None:
         now = time.monotonic()

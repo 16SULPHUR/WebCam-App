@@ -1,9 +1,9 @@
 """
-frame_sender.py — Python pyvirtualcam helper with background blur.
+frame_sender.py — Python stream processor.
 
-Reads raw BGR24 video frames from stdin (piped from FFmpeg)
-and pushes them to the OBS Virtual Camera via pyvirtualcam.
-Additionally processes background blur and outputs preview frames via stdout.
+Reads raw BGR24 video frames from stdin (piped from FFmpeg),
+applies dynamic adjustments (zoom, mirror, orientation, color, unsharp, and background blur)
+in real-time, and outputs them to the OBS Virtual Camera and web preview stdout.
 """
 
 import os
@@ -28,49 +28,91 @@ import queue
 import threading
 import time
 import cv2
+import json
 
 try:
     import pyvirtualcam
 except ImportError:
     pyvirtualcam = None
 
-# ─── TUNE: Must match Android encoder + FFmpeg scale settings ─────────────────
-WIDTH  = 1280
+# We read config path from argument
+if len(sys.argv) < 2:
+    sys.stderr.write("[PySender] ERROR: config.json path must be passed as the first argument.\n")
+    sys.exit(1)
+
+config_path = sys.argv[1]
+
+# Dynamic settings (default values)
+WIDTH = 1280
 HEIGHT = 720
-FPS    = 30
-BLUR   = 0
-VCAM_ENABLED = True
+FPS = 30
+mirror = False
+orientation = 0
+zoom = 1.0
+brightness = 0.0
+contrast = 1.0
+saturation = 1.0
+sharpness = 0.0
+blur = 0
+vcam_enabled = True
 
-# Parse command line arguments if provided
-if len(sys.argv) >= 3:
-    try:
-        WIDTH  = int(sys.argv[1])
-        HEIGHT = int(sys.argv[2])
-    except ValueError:
-        pass
-
-if len(sys.argv) >= 4:
-    try:
-        BLUR = int(sys.argv[3])
-    except ValueError:
-        pass
-
-if len(sys.argv) >= 5:
-    VCAM_ENABLED = sys.argv[4] == "1"
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Each raw BGR24 frame = WIDTH * HEIGHT * 3 bytes
-FRAME_SIZE = WIDTH * HEIGHT * 3
-
-vcam_queue = queue.Queue(maxsize=1)
-running = True
-py_cam = None
-
-segmenter = None
-segmenter_loading = False
+_prev_settings = {}
 
 def log(msg):
     print(msg, file=sys.stderr, flush=True)
+
+def load_config(initial=False):
+    global WIDTH, HEIGHT, mirror, orientation, zoom, brightness, contrast, saturation, sharpness, blur, vcam_enabled, _prev_settings
+    try:
+        with open(config_path, "r", encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        
+        # Resolution is parsed only once at startup or pipeline restarts
+        if initial:
+            res_str = cfg.get("resolution", "640x360")
+            if not res_str or res_str == "auto":
+                res_str = "1280x720"
+            w, h = res_str.split("x")
+            WIDTH = int(w)
+            HEIGHT = int(h)
+        
+        mirror = cfg.get("mirror", False)
+        orientation = int(cfg.get("orientation", 0))
+        zoom = float(cfg.get("zoom", 1.0))
+        brightness = float(cfg.get("brightness", 0.0))
+        contrast = float(cfg.get("contrast", 1.0))
+        saturation = float(cfg.get("saturation", 1.0))
+        sharpness = float(cfg.get("sharpness", 0.0))
+        blur = int(cfg.get("blur", 0))
+        vcam_enabled = cfg.get("vcamEnabled", True)
+        
+        current_state = {
+            "mirror": mirror, "orientation": orientation, "zoom": zoom,
+            "brightness": brightness, "contrast": contrast, "saturation": saturation,
+            "sharpness": sharpness, "blur": blur, "vcam_enabled": vcam_enabled
+        }
+        
+        if not initial and current_state != _prev_settings:
+            _prev_settings = current_state
+            log(f"[PySender] Config updated dynamically: Zoom={zoom}x, Mirror={mirror}, "
+                f"Ori={orientation}°, Brightness={brightness}, Contrast={contrast}, "
+                f"Saturation={saturation}, Sharpness={sharpness}, Blur={blur}, VCamEnabled={vcam_enabled}")
+        elif initial:
+            _prev_settings = current_state
+    except Exception as e:
+        log(f"[PySender] Error loading config: {e}")
+
+# Initial load of configuration
+load_config(initial=True)
+
+FRAME_SIZE = WIDTH * HEIGHT * 3
+
+vcam_lock = threading.Lock()
+py_cam = None
+running = True
+
+segmenter = None
+segmenter_loading = False
 
 def load_mediapipe_worker():
     global segmenter, segmenter_loading
@@ -78,171 +120,209 @@ def load_mediapipe_worker():
     try:
         import mediapipe as mp
         mp_selfie = mp.solutions.selfie_segmentation
-        # model_selection=0 is general/slower, model_selection=1 is landscape/faster
         segmenter = mp_selfie.SelfieSegmentation(model_selection=0)
-        log("[PySender] MediaPipe Selfie Segmentation loaded successfully in background thread.")
+        log("[PySender] MediaPipe Selfie Segmentation loaded successfully.")
     except Exception as exc:
-        log(f"[PySender] ERROR loading MediaPipe in background: {exc}")
+        log(f"[PySender] ERROR loading MediaPipe: {exc}")
     finally:
         segmenter_loading = False
 
-def vcam_sender_worker():
-    global py_cam, running
-    while running:
-        try:
-            # Block with timeout to check running flag periodically
-            frame = vcam_queue.get(timeout=0.1)
-        except queue.Empty:
-            continue
-        
-        if py_cam and running:
-            try:
-                py_cam.send(frame)
-            except Exception:
-                pass
+# Color EQ precomputation table
+last_applied_brightness = None
+last_applied_contrast = None
+lut = None
+
+def apply_color_eq(frame_bgr, brightness, contrast):
+    global last_applied_brightness, last_applied_contrast, lut
+    if last_applied_brightness != brightness or last_applied_contrast != contrast:
+        last_applied_brightness = brightness
+        last_applied_contrast = contrast
+        x = np.arange(256, dtype=np.float32)
+        lut_data = (x - 128.0) * contrast + 128.0 + brightness * 255.0
+        lut = np.clip(lut_data, 0, 255).astype(np.uint8)
+    
+    return cv2.LUT(frame_bgr, lut)
 
 def main():
-    global py_cam, running, BLUR, VCAM_ENABLED, segmenter_loading
-    log(f"[PySender] Starting Python frame_sender: {WIDTH}x{HEIGHT} @ {FPS}fps, Blur={BLUR}, VCamEnabled={VCAM_ENABLED}")
+    global py_cam, running, segmenter_loading
+    log(f"[PySender] Starting Python frame_sender: {WIDTH}x{HEIGHT} @ {FPS}fps")
 
-    if VCAM_ENABLED:
-        if pyvirtualcam is None:
-            log("[PySender] ERROR: pyvirtualcam module not found.")
-            sys.exit(1)
-        try:
-            py_cam = pyvirtualcam.Camera(width=WIDTH, height=HEIGHT, fps=FPS, print_fps=False, backend='obs')
-            log(f"[PySender] Virtual camera opened: {py_cam.device}")
-        except Exception as e:
-            log(f"[PySender] Error opening camera: {e}")
-            sys.exit(1)
-
-    # Initialize Selfie Segmentation resolution and background loader
-    preview_w, preview_h = 0, 0
-    seg_w, seg_h = 0, 0
-    if BLUR > 0:
-        segmenter_loading = True
-        threading.Thread(target=load_mediapipe_worker, name="MpLoader", daemon=True).start()
-
-        # Calculate target preview dimensions keeping aspect ratio (max dimension 640)
-        if WIDTH >= HEIGHT:
-            preview_w = 640
-            preview_h = int(640 * HEIGHT / WIDTH)
-        else:
-            preview_h = 640
-            preview_w = int(640 * WIDTH / HEIGHT)
-        preview_w = (preview_w // 2) * 2
-        preview_h = (preview_h // 2) * 2
-
-        # Calculate segmentation resolution (max dimension 640 for high performance)
-        if WIDTH >= HEIGHT:
-            seg_w = 640
-            seg_h = int(640 * HEIGHT / WIDTH)
-        else:
-            seg_h = 640
-            seg_w = int(640 * WIDTH / HEIGHT)
-        seg_w = (seg_w // 2) * 2
-        seg_h = (seg_h // 2) * 2
-
-    if VCAM_ENABLED:
-        # Start non-blocking background sender thread
-        sender_th = threading.Thread(target=vcam_sender_worker, name="WebVCamSenderThread", daemon=True)
-        sender_th.start()
-
-    stdin_buf = sys.stdin.buffer  # binary stdin
+    stdin_buf = sys.stdin.buffer
     frames_processed = 0
 
     try:
         while True:
-            # Read exactly one frame's worth of bytes from FFmpeg stdout
+            # Poll configuration changes every 10 frames (~300ms)
+            if frames_processed % 10 == 0:
+                load_config(initial=False)
+
+            # Read raw BGR24 frame from stdin
             raw = b''
             while len(raw) < FRAME_SIZE:
                 chunk = stdin_buf.read(FRAME_SIZE - len(raw))
                 if not chunk:
-                    # stdin closed — FFmpeg exited
                     log("[PySender] stdin closed, exiting.")
                     running = False
                     return
                 raw += chunk
 
-            # Reshape bytes into a numpy array (H, W, 3) in BGR order
-            frame_bgr = np.frombuffer(raw, dtype=np.uint8).reshape((HEIGHT, WIDTH, 3))
+            # Convert bytes to BGR numpy array
+            # Convert bytes to BGR numpy array and process
+            try:
+                frame_bgr = np.frombuffer(raw, dtype=np.uint8).reshape((HEIGHT, WIDTH, 3))
 
-            # Convert BGR → RGB for pyvirtualcam and MediaPipe
-            frame_rgb = frame_bgr[:, :, ::-1].copy()
+                # ─── 1. Crop-zoom ────────────────────────────────────────────────
+                if zoom > 1.0:
+                    cx, cy = WIDTH // 2, HEIGHT // 2
+                    cw, ch = int(WIDTH / zoom), int(HEIGHT / zoom)
+                    x1 = max(0, cx - cw // 2)
+                    y1 = max(0, cy - ch // 2)
+                    x2 = min(WIDTH, x1 + cw)
+                    y2 = min(HEIGHT, y1 + ch)
+                    cropped = frame_bgr[y1:y2, x1:x2]
+                    frame_bgr = cv2.resize(cropped, (WIDTH, HEIGHT), interpolation=cv2.INTER_LINEAR)
 
-            # Apply Background Blur if enabled and segmenter is loaded
-            if BLUR > 0 and segmenter is not None:
-                try:
-                    # Downscale for segmentation to run extremely fast on CPU
-                    frame_seg_in = cv2.resize(frame_rgb, (seg_w, seg_h), interpolation=cv2.INTER_LINEAR)
-                    
-                    # Process the downscaled frame
-                    results = segmenter.process(frame_seg_in)
-                    if results.segmentation_mask is not None:
-                        mask_small = results.segmentation_mask
-                        
-                        # Upscale mask back to original resolution
-                        mask = cv2.resize(mask_small, (WIDTH, HEIGHT), interpolation=cv2.INTER_LINEAR)
-                        mask_3d = np.stack((mask,) * 3, axis=-1)
-                        
-                        # Apply Gaussian blur
-                        ksize = BLUR * 2 + 1
-                        if ksize % 2 == 0:
-                            ksize += 1
-                        blurred_rgb = cv2.GaussianBlur(frame_rgb, (ksize, ksize), 0)
-                        
-                        # Blend foreground and background
-                        frame_rgb = (frame_rgb * mask_3d + blurred_rgb * (1.0 - mask_3d)).astype(np.uint8)
-                except Exception as e:
-                    if frames_processed % 30 == 0:
-                        log(f"[PySender] Segmentation error: {e}")
+                # ─── 2. Mirror ───────────────────────────────────────────────────
+                if mirror:
+                    frame_bgr = cv2.flip(frame_bgr, 1)
 
-            # Send to Virtual Camera
-            if VCAM_ENABLED:
-                try:
-                    vcam_queue.put_nowait(frame_rgb)
-                except queue.Full:
-                    try:
-                        vcam_queue.get_nowait()
-                    except queue.Empty:
-                        pass
-                    try:
-                        vcam_queue.put_nowait(frame_rgb)
-                    except queue.Full:
-                        pass
+                # ─── 3. Rotation ─────────────────────────────────────────────────
+                if orientation == 90:
+                    frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
+                elif orientation == 180:
+                    frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_180)
+                elif orientation == 270:
+                    frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-            # Send to Web Preview via stdout (if blur is enabled)
-            if BLUR > 0:
-                try:
-                    # Resize to preview dimension
-                    preview_frame = cv2.resize(frame_rgb, (preview_w, preview_h), interpolation=cv2.INTER_LINEAR)
-                    # Convert RGB back to BGR for encoding
-                    preview_frame_bgr = preview_frame[:, :, ::-1]
-                    # Encode to JPEG
-                    _, jpeg_bytes_arr = cv2.imencode('.jpg', preview_frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                    jpeg_bytes = jpeg_bytes_arr.tobytes()
-                    
-                    # Write length header (4 bytes, big-endian) + payload
-                    binary_stdout.write(len(jpeg_bytes).to_bytes(4, byteorder='big'))
-                    binary_stdout.write(jpeg_bytes)
-                    binary_stdout.flush()
-                except Exception as e:
-                    if frames_processed % 30 == 0:
-                        log(f"[PySender] Preview encoding error: {e}")
+                h_rot, w_rot = frame_bgr.shape[:2]
+
+                # ─── 4. Brightness / Contrast ─────────────────────────────────────
+                if abs(brightness) > 0.01 or abs(contrast - 1.0) > 0.01:
+                    frame_bgr = apply_color_eq(frame_bgr, brightness, contrast)
+
+                # ─── 5. Saturation ───────────────────────────────────────────────
+                if abs(saturation - 1.0) > 0.01:
+                    hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+                    hsv[:, :, 1] = np.clip(hsv[:, :, 1].astype(np.float32) * saturation, 0, 255).astype(np.uint8)
+                    frame_bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+                # ─── 6. Sharpness (Unsharp) ──────────────────────────────────────
+                if sharpness > 0.05:
+                    blurred = cv2.GaussianBlur(frame_bgr, (5, 5), 0)
+                    frame_bgr = cv2.addWeighted(frame_bgr, 1.0 + sharpness, blurred, -sharpness, 0)
+
+                # Convert BGR to RGB
+                frame_rgb = frame_bgr[:, :, ::-1].copy()
+
+                # ─── 7. Background Blur (MediaPipe) ──────────────────────────────
+                if blur > 0:
+                    if segmenter is None:
+                        if not segmenter_loading:
+                            segmenter_loading = True
+                            threading.Thread(target=load_mediapipe_worker, name="MpLoader", daemon=True).start()
+                    else:
+                        try:
+                            # Rescale target for MediaPipe segmentation
+                            if w_rot >= h_rot:
+                                seg_w = 640
+                                seg_h = int(640 * h_rot / w_rot)
+                            else:
+                                seg_h = 640
+                                seg_w = int(640 * w_rot / h_rot)
+                            seg_w = (seg_w // 2) * 2
+                            seg_h = (seg_h // 2) * 2
+
+                            frame_seg_in = cv2.resize(frame_rgb, (seg_w, seg_h), interpolation=cv2.INTER_LINEAR)
+                            results = segmenter.process(frame_seg_in)
+                            if results.segmentation_mask is not None:
+                                mask_small = results.segmentation_mask
+                                mask = cv2.resize(mask_small, (w_rot, h_rot), interpolation=cv2.INTER_LINEAR)
+                                mask_3d = np.stack((mask,) * 3, axis=-1)
+
+                                ksize = blur * 2 + 1
+                                if ksize % 2 == 0:
+                                    ksize += 1
+                                blurred_rgb = cv2.GaussianBlur(frame_rgb, (ksize, ksize), 0)
+                                frame_rgb = (frame_rgb * mask_3d + blurred_rgb * (1.0 - mask_3d)).astype(np.uint8)
+                        except Exception as e:
+                            if frames_processed % 90 == 0:
+                                log(f"[PySender] Segmentation error: {e}")
+
+                # ─── 8. Send to Virtual Camera ───────────────────────────────────
+                if vcam_enabled:
+                    with vcam_lock:
+                        if py_cam is None or py_cam.width != w_rot or py_cam.height != h_rot:
+                            if py_cam:
+                                try:
+                                    py_cam.close()
+                                except Exception:
+                                    pass
+                                py_cam = None
+                            try:
+                                if pyvirtualcam is not None:
+                                    py_cam = pyvirtualcam.Camera(width=w_rot, height=h_rot, fps=FPS, print_fps=False, backend='obs')
+                                    log(f"[PySender] Virtual camera opened: {py_cam.device} ({w_rot}x{h_rot})")
+                                else:
+                                    if frames_processed % 90 == 0:
+                                        log("[PySender] pyvirtualcam module not found.")
+                            except Exception as e:
+                                if frames_processed % 90 == 0:
+                                    log(f"[PySender] Error opening camera: {e}. Make sure OBS -> Virtual Camera is started.")
+                                py_cam = None
+
+                        if py_cam:
+                            try:
+                                py_cam.send(frame_rgb)
+                            except Exception as e:
+                                if frames_processed % 90 == 0:
+                                    log(f"[PySender] Error writing to virtual camera: {e}")
+                else:
+                    with vcam_lock:
+                        if py_cam is not None:
+                            try:
+                                py_cam.close()
+                            except Exception:
+                                pass
+                            py_cam = None
+                            log("[PySender] Virtual camera closed (disabled in config).")
+
+                # ─── 9. Send to Web Preview (always active) ─────────────────────
+                if w_rot >= h_rot:
+                    preview_w = 640
+                    preview_h = int(640 * h_rot / w_rot)
+                else:
+                    preview_h = 640
+                    preview_w = int(640 * w_rot / h_rot)
+                preview_w = (preview_w // 2) * 2
+                preview_h = (preview_h // 2) * 2
+
+                preview_frame = cv2.resize(frame_rgb, (preview_w, preview_h), interpolation=cv2.INTER_LINEAR)
+                preview_frame_bgr = preview_frame[:, :, ::-1]
+                _, jpeg_bytes_arr = cv2.imencode('.jpg', preview_frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                jpeg_bytes = jpeg_bytes_arr.tobytes()
+                
+                binary_stdout.write(len(jpeg_bytes).to_bytes(4, byteorder='big'))
+                binary_stdout.write(jpeg_bytes)
+                binary_stdout.flush()
+            except Exception as e:
+                if frames_processed % 90 == 0:
+                    log(f"[PySender] Frame processing loop exception: {e}")
 
             frames_processed += 1
-            if frames_processed % 30 == 0:
+            if frames_processed % 90 == 0:
                 log(f"[PySender] Processed frame #{frames_processed}")
 
     except KeyboardInterrupt:
         log("[PySender] Interrupted.")
     finally:
         running = False
-        if py_cam:
-            try:
-                py_cam.close()
-            except Exception:
-                pass
+        with vcam_lock:
+            if py_cam:
+                try:
+                    py_cam.close()
+                except Exception:
+                    pass
+                py_cam = None
 
 if __name__ == '__main__':
     main()

@@ -74,6 +74,7 @@ class CameraStreamer(
     // Camera2
     private var cameraDevice: CameraDevice? = null
     private var captureSession: CameraCaptureSession? = null
+    private var currentCameraId: String? = null
 
     // MediaCodec encoder
     private var encoder: MediaCodec? = null
@@ -265,14 +266,38 @@ class CameraStreamer(
     // Camera2 — open back camera and create a capture session
     // ─────────────────────────────────────────────────────────────────────────
 
+    fun switchCamera(cameraId: String) {
+        if (currentCameraId == cameraId) return
+        currentCameraId = cameraId
+        if (running.get()) {
+            cameraHandler?.post {
+                try {
+                    captureSession?.close()
+                    captureSession = null
+                    cameraDevice?.close()
+                    cameraDevice = null
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error closing camera for switch: ${e.message}")
+                }
+                openCamera()
+            }
+        }
+    }
+
     private fun openCamera() {
         val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
-        // Pick the first back-facing camera
-        val cameraId = manager.cameraIdList.first { id ->
-            manager.getCameraCharacteristics(id)
-                .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
-        }
+        val cameraId = currentCameraId ?: manager.cameraIdList.firstOrNull { id ->
+            try {
+                manager.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+            } catch (e: Exception) {
+                false
+            }
+        } ?: manager.cameraIdList.firstOrNull() ?: throw IllegalStateException("No camera available")
+
+        currentCameraId = cameraId
+        Log.i(TAG, "Opening camera ID: $cameraId")
 
         manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
             override fun onOpened(camera: CameraDevice) {

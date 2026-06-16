@@ -10,7 +10,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/terminal.css">
 </head>
 <body>
 
@@ -26,7 +25,6 @@
       <nav class="settings-nav">
         <button class="nav-tab active" data-tab="camera" title="Camera Settings">Camera</button>
         <button class="nav-tab" data-tab="actions" title="Quick Actions">Actions</button>
-        <button class="nav-tab" data-tab="logs" title="System Logs">Logs</button>
       </nav>
 
       <!-- Tab Contents Container -->
@@ -36,9 +34,6 @@
 
         <!-- Tab 2: Actions (Loaded Dynamically) -->
         <div class="tab-content" id="tab-actions" data-component="tab_actions"></div>
-
-        <!-- Tab 3: Logs (Loaded Dynamically) -->
-        <div class="tab-content" id="tab-logs" data-component="tab_logs"></div>
       </div>
     </aside>
 
@@ -46,12 +41,14 @@
     <section id="preview-panel" data-component="preview"></section>
 
   </main>
+  
+  <!-- Mobile Hardware-Style Control Panel UI (Loaded Dynamically) -->
+  <section id="controller-ui" data-component="controller" style="display:none;"></section>
 
   <!-- Hidden video for PiP support -->
   <video id="pip-video" style="display:none;" autoplay muted playsinline></video>
 
   <!-- Core JavaScript Modules -->
-  <script src="js/terminal.js"></script>
   <script src="js/stream.js"></script>
   <script src="js/config.js"></script>
   <script src="js/app.js"></script>

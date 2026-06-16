@@ -4,6 +4,32 @@
  * Dynamically loads modular HTML components on page load,
  * then bootstraps the dashboard SSE connection and event listeners.
  */
+
+// Global Toast notification system
+const Toast = {
+  show(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    // Trigger animation
+    setTimeout(() => toast.classList.add('show'), 10);
+    
+    // Auto remove
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+};
+
 (function () {
   'use strict';
 
@@ -40,12 +66,12 @@
 
       logEventSource.onopen = () => {
         Stream.setStatus('connecting', 'Connecting...');
-        Terminal.addLine('system', 'Connected to dashboard log stream.');
+        console.log('[System] Connected to dashboard log stream.');
       };
 
       logEventSource.onerror = () => {
         Stream.setStatus('error', 'Disconnected');
-        Terminal.addLine('system', 'Log stream disconnected - retrying...');
+        console.log('[System] Log stream disconnected - retrying...');
       };
 
       logEventSource.onmessage = (event) => {
@@ -57,7 +83,7 @@
         }
 
         if (data.type === 'log') {
-          Terminal.addLine(data.source, data.message);
+          console.log(`[${data.source.toUpperCase()}] ${data.message}`);
         } else if (data.type === 'status') {
           Stream.handleStatus(data);
         }
@@ -68,11 +94,6 @@
 
     // ── Keyboard shortcuts ──────────────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
-      // Ctrl+L → clear logs
-      if (e.ctrlKey && e.key === 'l') {
-        e.preventDefault();
-        Terminal.clear();
-      }
       // F11 → fullscreen feed
       if (e.key === 'F11') {
         e.preventDefault();
@@ -84,7 +105,7 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         if (!logEventSource || logEventSource.readyState === EventSource.CLOSED) {
-          Terminal.addLine('system', 'Tab re-focused - reconnecting log stream...');
+          console.log('[System] Tab re-focused - reconnecting log stream...');
           connectSSE();
         }
       }
@@ -106,18 +127,7 @@
           const isActive = content.id === `tab-${targetTab}`;
           content.classList.toggle('active', isActive);
         });
-
-        // Scroll terminal to bottom when selecting logs tab
-        if (targetTab === 'logs') {
-          const term = document.getElementById('terminal');
-          if (term) term.scrollTop = term.scrollHeight;
-        }
       });
-    });
-
-    // Close console redirects back to camera settings tab
-    document.getElementById('btn-close-console')?.addEventListener('click', () => {
-      document.querySelector('.nav-tab[data-tab="camera"]')?.click();
     });
   }
 

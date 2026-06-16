@@ -79,16 +79,11 @@ const Stream = (() => {
   }
 
   // ── Orientation — server-side rotation ──────────────────────────────────────
-  // NOTE: rotation is now applied server-side by FFmpeg.
-  // This function just stores the current orientation value for reference.
-  // No CSS transform rotation needed since the MJPEG stream itself is already rotated.
   function setOrientation(deg) {
     currentOrientation = parseInt(deg, 10) || 0;
     const img = el.feedImg();
     if (!img) return;
-    // Remove any leftover rotation classes from old CSS-only approach
     img.classList.remove('rot-0', 'rot-90', 'rot-180', 'rot-270');
-    // Reset transform — server handles rotation now
     img.style.transform = '';
     img.style.removeProperty('--rot-scale');
   }
@@ -133,12 +128,9 @@ const Stream = (() => {
       setStatus('connected', 'Streaming Active');
       if (img) {
         img.style.display = 'block';
-        // Always reload the feed on reconnect so the browser opens a fresh
-        // HTTP connection to the new pipeline's MJPEG stream.
         if (connTransitioned) {
           _reloadFeed();
           _startFeedKeepalive();
-          // Wire up onerror so a stale/dropped stream auto-retries
           img.onerror = () => {
             if (wasAndroidConnected) {
               if (_feedRetryTimer) clearTimeout(_feedRetryTimer);
@@ -237,36 +229,36 @@ const Stream = (() => {
         const res = await fetch('/api/record/start', { method: 'POST' });
         const json = await res.json();
         if (res.ok) {
-          Terminal.addLine('system', `✓ Recording started → ${json.file}`);
+          Toast.show(`✓ Recording started → ${json.file}`, 'success');
           _setRecordingUI(true);
         } else {
-          Terminal.addLine('system', `⚠️ Record start failed: ${json.error}`);
+          Toast.show(`⚠️ Record start failed: ${json.error}`, 'error');
         }
       } else {
         const res = await fetch('/api/record/stop', { method: 'POST' });
         const json = await res.json();
         if (res.ok) {
-          Terminal.addLine('system', `✓ Recording stopped. Saved: ${json.file}`);
+          Toast.show(`✓ Recording stopped. Saved: ${json.file}`, 'success');
           _setRecordingUI(false);
         } else {
-          Terminal.addLine('system', `⚠️ Record stop failed: ${json.error}`);
+          Toast.show(`⚠️ Record stop failed: ${json.error}`, 'error');
         }
       }
     } catch (err) {
-      Terminal.addLine('system', `Recording error: ${err.message}`);
+      Toast.show(`Recording error: ${err.message}`, 'error');
     }
   }
 
   // ── Reconnect ─────────────────────────────────────────────────────────────
   async function reconnect() {
-    Terminal.addLine('system', 'Requesting pipeline reconnect...');
+    Toast.show('Requesting pipeline reconnect...');
     setStatus('connecting', 'Reconnecting…');
     try {
       const res = await fetch('/api/reconnect', { method: 'POST' });
-      if (res.ok) Terminal.addLine('system', '✓ Reconnect command sent.');
-      else        Terminal.addLine('system', `Reconnect failed: ${res.statusText}`);
+      if (res.ok) Toast.show('✓ Reconnect command sent.', 'success');
+      else        Toast.show(`Reconnect failed: ${res.statusText}`, 'error');
     } catch (err) {
-      Terminal.addLine('system', `Reconnect error: ${err.message}`);
+      Toast.show(`Reconnect error: ${err.message}`, 'error');
     }
   }
 
@@ -274,7 +266,7 @@ const Stream = (() => {
   function snapshot() {
     const img = el.feedImg();
     if (!img || img.style.display === 'none') {
-      Terminal.addLine('system', '⚠️ No active stream to snapshot.'); return;
+      Toast.show('⚠️ No active stream to snapshot.', 'error'); return;
     }
     try {
       const canvas = document.createElement('canvas');
@@ -285,49 +277,58 @@ const Stream = (() => {
       link.download = `snapshot-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      Terminal.addLine('system', '✓ Snapshot saved.');
+      Toast.show('✓ Snapshot saved.', 'success');
     } catch (err) {
-      Terminal.addLine('system', `Snapshot error: ${err.message}`);
+      Toast.show(`Snapshot error: ${err.message}`, 'error');
     }
   }
 
-  // ── Fullscreen ────────────────────────────────────────────────────────────
-  function toggleFullscreen() {
+  // ── Fullscreen (Native HTML5 API) ─────────────────────────────────────────
+  async function toggleFullscreen() {
     const container = el.feedContainer();
     if (!container) return;
-    isFullscreen = !isFullscreen;
-    container.classList.toggle('fullscreen-mode', isFullscreen);
-    if (isFullscreen) {
-      document.addEventListener('keydown', _escapeFullscreen);
-      Terminal.addLine('system', 'Fullscreen enabled. Press Esc to exit.');
-    } else {
-      document.removeEventListener('keydown', _escapeFullscreen);
-    }
-    // Force image reload to fill new viewport dimensions
-    const img = el.feedImg();
-    if (img && img.style.display !== 'none') {
-      setTimeout(() => { img.src = img.src; }, 100);
+    try {
+      if (!document.fullscreenElement) {
+        if (container.requestFullscreen) {
+          await container.requestFullscreen();
+        } else if (container.webkitRequestFullscreen) {
+          await container.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.error('Fullscreen error:', err);
+      Toast.show(`Fullscreen error: ${err.message}`, 'error');
     }
   }
-  function _escapeFullscreen(e) { if (e.key === 'Escape') toggleFullscreen(); }
+
+  // Listen to fullscreen changes to update class and UI state
+  document.addEventListener('fullscreenchange', () => {
+    isFullscreen = !!document.fullscreenElement;
+    const container = el.feedContainer();
+    if (container) {
+      container.classList.toggle('fullscreen-mode', isFullscreen);
+    }
+  });
 
   // ── Picture in Picture ────────────────────────────────────────────────────
   async function togglePiP() {
     const img = el.feedImg();
     if (!img || img.style.display === 'none') {
-      Terminal.addLine('system', '⚠️ PiP requires an active stream.'); return;
+      Toast.show('⚠️ PiP requires an active stream.', 'error'); return;
     }
 
-    // Use a hidden <video> element fed via MediaStream from canvas
     try {
       const video = document.getElementById('pip-video');
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
-        Terminal.addLine('system', '✓ Exited PiP.');
+        Toast.show('✓ Exited PiP.', 'success');
         return;
       }
 
-      // Draw feed-img frames into a canvas → MediaStream → video → PiP
       const canvas = document.createElement('canvas');
       canvas.width = 640; canvas.height = 360;
       const ctx = canvas.getContext('2d');
@@ -342,14 +343,14 @@ const Stream = (() => {
       video.srcObject = stream;
       await video.play();
       await video.requestPictureInPicture();
-      Terminal.addLine('system', '✓ PiP activated. Click the video to return.');
+      Toast.show('✓ PiP activated.', 'success');
 
       video.addEventListener('leavepictureinpicture', () => {
         cancelAnimationFrame(animId);
         video.srcObject = null;
       }, { once: true });
     } catch (err) {
-      Terminal.addLine('system', `PiP error: ${err.message}`);
+      Toast.show(`PiP error: ${err.message}`, 'error');
     }
   }
 

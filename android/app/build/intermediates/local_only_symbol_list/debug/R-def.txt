@@ -6,6 +6,7 @@ drawable circle_glow_pulse
 drawable gradient_bottom_overlay
 drawable gradient_top_overlay
 drawable ic_launcher_foreground
+id btnSwitchCamera
 id btnToggle
 id cameraPreview
 id statusCard

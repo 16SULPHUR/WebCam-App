@@ -13,6 +13,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.viewbinding.ViewBinding;
 import androidx.viewbinding.ViewBindings;
 import com.example.usbwebcambridge.R;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import java.lang.NullPointerException;
 import java.lang.Override;
@@ -21,6 +22,9 @@ import java.lang.String;
 public final class ActivityMainBinding implements ViewBinding {
   @NonNull
   private final CoordinatorLayout rootView;
+
+  @NonNull
+  public final MaterialButton btnSwitchCamera;
 
   @NonNull
   public final Button btnToggle;
@@ -40,10 +44,12 @@ public final class ActivityMainBinding implements ViewBinding {
   @NonNull
   public final TextView tvStatus;
 
-  private ActivityMainBinding(@NonNull CoordinatorLayout rootView, @NonNull Button btnToggle,
+  private ActivityMainBinding(@NonNull CoordinatorLayout rootView,
+      @NonNull MaterialButton btnSwitchCamera, @NonNull Button btnToggle,
       @NonNull TextureView cameraPreview, @NonNull MaterialCardView statusCard,
       @NonNull View statusPulse, @NonNull TextView tvRecBadge, @NonNull TextView tvStatus) {
     this.rootView = rootView;
+    this.btnSwitchCamera = btnSwitchCamera;
     this.btnToggle = btnToggle;
     this.cameraPreview = cameraPreview;
     this.statusCard = statusCard;
@@ -79,6 +85,12 @@ public final class ActivityMainBinding implements ViewBinding {
     // This is done to optimize the compiled bytecode for size and performance.
     int id;
     missingId: {
+      id = R.id.btnSwitchCamera;
+      MaterialButton btnSwitchCamera = ViewBindings.findChildViewById(rootView, id);
+      if (btnSwitchCamera == null) {
+        break missingId;
+      }
+
       id = R.id.btnToggle;
       Button btnToggle = ViewBindings.findChildViewById(rootView, id);
       if (btnToggle == null) {
@@ -115,8 +127,8 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
-      return new ActivityMainBinding((CoordinatorLayout) rootView, btnToggle, cameraPreview,
-          statusCard, statusPulse, tvRecBadge, tvStatus);
+      return new ActivityMainBinding((CoordinatorLayout) rootView, btnSwitchCamera, btnToggle,
+          cameraPreview, statusCard, statusPulse, tvRecBadge, tvStatus);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

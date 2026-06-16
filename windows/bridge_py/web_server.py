@@ -195,17 +195,33 @@ class BridgeHandler(BaseHTTPRequestHandler):
         body   = self.rfile.read(length)
         try:
             data = json.loads(body)
+            
+            old_res = self.config.get("resolution")
+            old_fps = self.config.get("targetFps")
+            
+            new_res = data.get("resolution", old_res)
+            new_fps = data.get("targetFps", old_fps)
+            
+            needs_restart = (old_res != new_res) or (old_fps != new_fps)
+            
             self.config.update(data)
-            self._json({"success": True})
-            self.broadcaster.broadcast_log(
-                "system",
-                f"Config saved — restarting pipeline…",
-            )
-            threading.Thread(
-                target=self._pipeline_ref.restart,
-                args=(f"Config updated",),
-                daemon=True,
-            ).start()
+            self._json({"success": True, "restarted": needs_restart})
+            
+            if needs_restart:
+                self.broadcaster.broadcast_log(
+                    "system",
+                    f"Config saved — restarting pipeline (resolution/FPS change)...",
+                )
+                threading.Thread(
+                    target=self._pipeline_ref.restart,
+                    args=(f"Config updated (resolution/FPS change)",),
+                    daemon=True,
+                ).start()
+            else:
+                self.broadcaster.broadcast_log(
+                    "system",
+                    f"Config saved — settings applied dynamically.",
+                )
         except Exception as exc:
             self._json({"error": str(exc)}, 400)
 

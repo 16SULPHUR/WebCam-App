@@ -53,6 +53,7 @@
 }
 
 /* ── Video Feed ───────────────────────────────────────────────────────────── */
+/* ── Video Feed & Split Layout ────────────────────────────────────────────── */
 .feed-container {
   width: 100%;
   aspect-ratio: 16/9;
@@ -61,6 +62,61 @@
   overflow: hidden;
   position: relative;
   border: 1px solid rgba(255,255,255,0.05);
+}
+
+.feed-container.split-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  aspect-ratio: auto;
+  overflow: visible;
+}
+
+.feed-box {
+  flex: 1;
+  background: #000;
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: var(--radius-md);
+  aspect-ratio: 16/9;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.feed-box-header {
+  padding: 8px 14px;
+  background: rgba(15, 23, 42, 0.4);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.feed-box-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.device-select {
+  background: #0f172a;
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-main);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
 }
 
 /* Wrapper so transform doesn't overflow the container */
@@ -73,23 +129,23 @@
   overflow: hidden;
 }
 
-.feed-img {
+.feed-img, #obs-video {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
-  /* transform-origin center so rotation works correctly */
   transform-origin: center center;
   transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), filter 0.2s ease;
   will-change: transform;
 }
 
-/* Orientation classes — rotation is now server-side via FFmpeg.
-   These rules are kept for backward-compatibility but not used. */
-/* .feed-img.rot-0   { transform: rotate(0deg)   scale(1); } */
-/* .feed-img.rot-90  { transform: rotate(90deg)  scale(var(--rot-scale, 0.5625)); } */
-/* .feed-img.rot-180 { transform: rotate(180deg) scale(1); } */
-/* .feed-img.rot-270 { transform: rotate(270deg) scale(var(--rot-scale, 0.5625)); } */
+#obs-video {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  background: #000;
+}
 
 .feed-placeholder {
   position: absolute; inset: 0;
@@ -120,6 +176,7 @@
   border-radius: 6px; padding: 3px 10px;
   font-family: 'JetBrains Mono', monospace; font-size: 11px;
   color: var(--accent-emerald); pointer-events: none;
+  z-index: 100;
 }
 
 /* ── Stream Health ─────────────────────────────────────────────────────────── */
@@ -152,9 +209,57 @@
   font-size: 11px; font-weight: 600; color: var(--text-main); white-space: nowrap;
 }
 
-/* ── Fullscreen ────────────────────────────────────────────────────────────── */
-#feed-container.fullscreen-mode {
-  position: fixed; inset: 0; z-index: 9999;
-  width: 100vw !important; height: 100vh !important;
-  aspect-ratio: unset; border-radius: 0; border: none;
+/* ── Fullscreen (Native & CSS fallback) ────────────────────────────────────────────── */
+#feed-container.fullscreen-mode,
+.feed-container:fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  aspect-ratio: unset !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #000 !important;
 }
+
+/* ── Toast Notifications ─────────────────────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 9999;
+  pointer-events: none;
+}
+.toast {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  min-width: 250px;
+  max-width: 380px;
+  transform: translateX(120%);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  font-size: 13px;
+  border-left: 4px solid var(--accent-cyan);
+  pointer-events: auto;
+}
+.toast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+.toast.success {
+  border-left-color: var(--accent-emerald);
+}
+.toast.error {
+  border-left-color: var(--accent-rose);
+}
+
+

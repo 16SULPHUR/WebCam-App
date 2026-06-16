@@ -3178,6 +3178,7 @@ id bounce
 id bounceBoth
 id bounceEnd
 id bounceStart
+id btnSwitchCamera
 id btnToggle
 id buttonPanel
 id cache_measures

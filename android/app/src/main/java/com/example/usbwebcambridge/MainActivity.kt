@@ -1,8 +1,11 @@
 package com.example.usbwebcambridge
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.os.Bundle
 import android.view.TextureView
 import android.view.View
@@ -30,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvRecBadge: TextView
     private lateinit var btnToggle: Button   // hidden, kept for compat
+    private lateinit var btnSwitchCamera: Button
     private lateinit var streamer: CameraStreamer
 
     private var isStreaming = false
@@ -46,6 +50,11 @@ class MainActivity : AppCompatActivity() {
         tvStatus      = findViewById(R.id.tvStatus)
         tvRecBadge    = findViewById(R.id.tvRecBadge)
         btnToggle     = findViewById(R.id.btnToggle)
+        btnSwitchCamera = findViewById(R.id.btnSwitchCamera)
+
+        btnSwitchCamera.setOnClickListener {
+            showCameraSelectionDialog()
+        }
 
         streamer = CameraStreamer(this) { status ->
             runOnUiThread {
@@ -119,6 +128,44 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvStatus.text = "Camera permission denied"
         }
+    }
+
+    private fun showCameraSelectionDialog() {
+        val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val cameraIds = manager.cameraIdList
+        val items = mutableListOf<String>()
+        val actualIds = mutableListOf<String>()
+
+        for (id in cameraIds) {
+            try {
+                val chars = manager.getCameraCharacteristics(id)
+                val facing = chars.get(CameraCharacteristics.LENS_FACING)
+                val facingStr = when (facing) {
+                    CameraCharacteristics.LENS_FACING_BACK -> "Back Camera"
+                    CameraCharacteristics.LENS_FACING_FRONT -> "Front Camera"
+                    CameraCharacteristics.LENS_FACING_EXTERNAL -> "External Camera"
+                    else -> "Camera"
+                }
+                items.add("$facingStr (ID: $id)")
+                actualIds.add(id)
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+
+        if (items.isEmpty()) {
+            android.widget.Toast.makeText(this, "No cameras found", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        builder.setTitle("Select Camera / Lens")
+        builder.setItems(items.toTypedArray()) { _, which ->
+            val selectedId = actualIds[which]
+            streamer.switchCamera(selectedId)
+            android.widget.Toast.makeText(this, "Switched to ${items[which]}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        builder.show()
     }
 
     override fun onDestroy() {
