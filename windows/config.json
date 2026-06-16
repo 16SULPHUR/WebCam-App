@@ -1,13 +1,13 @@
 {
   "resolution": "640x360",
-  "mirror": false,
+  "mirror": true,
   "orientation": 0,
   "vcamEnabled": true,
   "zoom": 1,
   "brightness": 0,
   "contrast": 1,
   "saturation": 1,
-  "sharpness": 0,
+  "sharpness": 0.3,
   "targetFps": 30,
-  "blur": 0
+  "blur": 25
 }

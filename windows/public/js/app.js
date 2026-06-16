@@ -129,6 +129,38 @@ const Toast = {
         });
       });
     });
+
+    // ── Mobile Controller Mode Toggle ──────────────────────────────────────────
+    const btnToggle = document.getElementById('btn-ui-toggle');
+    if (btnToggle) {
+      btnToggle.style.display = '';
+
+      btnToggle.addEventListener('click', () => {
+        const isController = document.body.classList.toggle('controller-mode-active');
+        btnToggle.textContent = isController ? '📋 Standard' : '📟 Controller';
+
+        const feedImg = document.getElementById('feed-img');
+        const feedPH = document.getElementById('feed-placeholder');
+        const feedOverlay = document.getElementById('feed-overlay');
+
+        if (isController) {
+          const wrapper = document.getElementById('controller-feed-img-wrapper');
+          if (wrapper) {
+            if (feedImg) wrapper.appendChild(feedImg);
+            if (feedPH) wrapper.appendChild(feedPH);
+            if (feedOverlay) wrapper.appendChild(feedOverlay);
+          }
+        } else {
+          const wrapper = document.getElementById('feed-img-wrapper');
+          const container = document.getElementById('feed-container');
+          if (wrapper && feedImg) wrapper.appendChild(feedImg);
+          if (container) {
+            if (feedPH) container.appendChild(feedPH);
+            if (feedOverlay) container.appendChild(feedOverlay);
+          }
+        }
+      });
+    }
   }
 
   // Bootstrap components and application

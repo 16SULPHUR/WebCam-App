@@ -211,7 +211,9 @@
 
 /* ── Fullscreen (Native & CSS fallback) ────────────────────────────────────────────── */
 #feed-container.fullscreen-mode,
-.feed-container:fullscreen {
+.feed-container:fullscreen,
+#controller-preview-box.fullscreen-mode,
+#controller-preview-box:fullscreen {
   position: fixed !important;
   inset: 0 !important;
   z-index: 9999 !important;
@@ -222,6 +224,19 @@
   border: none !important;
   background: #000 !important;
 }
+
+#controller-preview-box.fullscreen-mode .controller-preview-header,
+#controller-preview-box:fullscreen .controller-preview-header {
+  display: none !important;
+}
+
+#controller-preview-box.fullscreen-mode .controller-video-container,
+#controller-preview-box:fullscreen .controller-video-container {
+  height: 100% !important;
+  width: 100% !important;
+  aspect-ratio: unset !important;
+}
+
 
 /* ── Toast Notifications ─────────────────────────────────────────────────── */
 #toast-container {

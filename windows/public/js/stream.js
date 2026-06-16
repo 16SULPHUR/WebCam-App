@@ -12,7 +12,12 @@ const Stream = (() => {
     feedOverlay:   () => document.getElementById('feed-overlay'),
     overlayFps:    () => document.getElementById('overlay-fps'),
     feedBadge:     () => document.getElementById('feed-badge'),
-    feedContainer: () => document.getElementById('feed-container'),
+    feedContainer: () => {
+      if (document.body.classList.contains('controller-mode-active')) {
+        return document.getElementById('controller-preview-box');
+      }
+      return document.getElementById('feed-container');
+    },
     hdrH264:       () => document.getElementById('hdr-h264'),
     hdrFrames:     () => document.getElementById('hdr-frames'),
     hdrFps:        () => document.getElementById('hdr-fps'),
@@ -221,6 +226,12 @@ const Stream = (() => {
     if (label) label.textContent = active ? 'Stop Rec' : 'Record';
     if (ind)   ind.style.display = active ? 'flex' : 'none';
     if (hr)    { hr.textContent = active ? 'REC' : 'IDLE'; hr.style.color = active ? 'var(--accent-red)' : 'var(--text-muted)'; }
+
+    // Sync mobile controller recording UI
+    const ctrlBtn = document.getElementById('controller-btn-record');
+    const ctrlLed = document.getElementById('led-record');
+    if (ctrlBtn) ctrlBtn.classList.toggle('active', active);
+    if (ctrlLed) ctrlLed.classList.toggle('active', active);
   }
 
   async function toggleRecording() {
