@@ -16,35 +16,11 @@
   <!-- Header Section (Loaded Dynamically) -->
   <header id="app-header" data-component="header"></header>
 
-  <!-- Main Grid (Split Layout) -->
+  <!-- Hardware-Style Control Panel UI (Loaded Dynamically) -->
   <main id="app-main">
-
-    <!-- Left sidebar containing tabs -->
-    <aside id="settings-panel">
-      <!-- Tabs Navigation Header -->
-      <nav class="settings-nav">
-        <button class="nav-tab active" data-tab="camera" title="Camera Settings">Camera</button>
-        <button class="nav-tab" data-tab="actions" title="Quick Actions">Actions</button>
-      </nav>
-
-      <!-- Tab Contents Container -->
-      <div class="tab-container">
-        <!-- Tab 1: Camera settings (Loaded Dynamically) -->
-        <div class="tab-content active" id="tab-camera" data-component="tab_camera"></div>
-
-        <!-- Tab 2: Actions (Loaded Dynamically) -->
-        <div class="tab-content" id="tab-actions" data-component="tab_actions"></div>
-      </div>
-    </aside>
-
-    <!-- Right: Video Feed Column (Loaded Dynamically) -->
-    <section id="preview-panel" data-component="preview"></section>
-
+    <section id="controller-ui" data-component="controller"></section>
   </main>
   
-  <!-- Mobile Hardware-Style Control Panel UI (Loaded Dynamically) -->
-  <section id="controller-ui" data-component="controller" style="display:none;"></section>
-
   <!-- Hidden video for PiP support -->
   <video id="pip-video" style="display:none;" autoplay muted playsinline></video>
 

@@ -8,7 +8,25 @@
     </div>
     
     <div class="controller-video-container" id="controller-feed-img-wrapper">
-      <!-- The #feed-img and overlays will be moved here dynamically in app.js -->
+      <div class="feed-placeholder" id="feed-placeholder">
+        <div class="placeholder-icon">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2">
+            <rect x="2" y="2" width="20" height="20" rx="2.18"/>
+            <line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/>
+            <line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/>
+            <line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/>
+            <line x1="17" y1="7" x2="22" y2="7"/>
+          </svg>
+        </div>
+        <span>Waiting for H.264 stream...</span>
+        <span class="placeholder-sub">Make sure ADB is connected and your phone is streaming</span>
+      </div>
+      <div class="feed-img-wrapper" id="feed-img-wrapper">
+        <img class="feed-img" id="feed-img" src="" style="display:none;" alt="Live Webcam Feed">
+      </div>
+      <div class="feed-overlay" id="feed-overlay" style="display:none;">
+        <span id="overlay-fps">-- fps</span>
+      </div>
     </div>
   </div>
 
@@ -88,7 +106,7 @@
     <!-- Zoom Rotary Card -->
     <div class="controller-knob-card">
       <span class="knob-title">Hardware Zoom</span>
-      <div class="rotary-knob-outer">
+      <div class="rotary-knob-outer" id="zoom-knob-drag-zone">
         <div class="rotary-ticks"></div>
         <div class="rotary-knob" id="zoom-rotary-knob">
           <div class="rotary-indicator"></div>
@@ -139,6 +157,36 @@
         </div>
       </div>
 
+      <!-- Reset Pipeline button -->
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">Reset Pipeline</span>
+        <div class="mech-toggle-control">
+          <button class="mech-press-btn btn-blue" onclick="Stream.reconnect()">
+            RST
+          </button>
+        </div>
+      </div>
+
+      <!-- Snapshot button -->
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">Capture Frame</span>
+        <div class="mech-toggle-control">
+          <button class="mech-press-btn btn-silver" onclick="Stream.snapshot()">
+            SNAP
+          </button>
+        </div>
+      </div>
+
+      <!-- PiP toggle -->
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">Float Picture</span>
+        <div class="mech-toggle-control">
+          <button class="mech-press-btn btn-silver" onclick="Stream.togglePiP()">
+            PIP
+          </button>
+        </div>
+      </div>
+
       <!-- Orientation selector -->
       <div class="mech-toggle-row select-row">
         <span class="mech-toggle-label">Orientation</span>
@@ -147,6 +195,32 @@
           <option value="90">90°</option>
           <option value="180">180°</option>
           <option value="270">270°</option>
+        </select>
+      </div>
+
+      <!-- Resolution selector -->
+      <div class="mech-toggle-row select-row">
+        <span class="mech-toggle-label">Resolution</span>
+        <select id="controller-resolution-select" class="ctrl-select ctrl-select-mech" onchange="Config.updateFromController()">
+          <option value="auto">Auto (720p)</option>
+          <option value="640x360">640 x 360</option>
+          <option value="640x480">640 x 480</option>
+          <option value="960x540">960 x 540</option>
+          <option value="1280x720">1280 x 720</option>
+          <option value="1280x960">1280 x 960</option>
+          <option value="1920x1080">1920 x 1080</option>
+        </select>
+      </div>
+
+      <!-- FPS selector -->
+      <div class="mech-toggle-row select-row">
+        <span class="mech-toggle-label">FPS Limit</span>
+        <select id="controller-fps-select" class="ctrl-select ctrl-select-mech" onchange="Config.updateFromController()">
+          <option value="10">10 fps</option>
+          <option value="15">15 fps</option>
+          <option value="20">20 fps</option>
+          <option value="24">24 fps</option>
+          <option value="30" selected>30 fps</option>
         </select>
       </div>
 

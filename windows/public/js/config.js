@@ -115,8 +115,8 @@ const Config = (() => {
   }
 
   function _updateLEDs() {
-    const mirrorActive = el('mirror-checkbox')?.checked || el('controller-mirror-checkbox')?.checked || false;
-    const vcamActive   = el('vcam-checkbox')?.checked   || el('controller-vcam-checkbox')?.checked   || false;
+    const mirrorActive = el('controller-mirror-checkbox')?.checked || el('mirror-checkbox')?.checked || false;
+    const vcamActive   = el('controller-vcam-checkbox')?.checked   || el('vcam-checkbox')?.checked   || false;
 
     const ledMirror = el('led-mirror');
     if (ledMirror) {
@@ -130,22 +130,35 @@ const Config = (() => {
 
   function _syncUIFromStandard() {
     // Sync checkboxes
-    const mirrorVal = !!el('mirror-checkbox')?.checked;
-    const vcamVal   = el('vcam-checkbox')?.checked !== false;
+    const mirrorVal = el('mirror-checkbox') ? !!el('mirror-checkbox').checked : !!el('controller-mirror-checkbox')?.checked;
+    const vcamVal   = el('vcam-checkbox') ? el('vcam-checkbox').checked !== false : el('controller-vcam-checkbox')?.checked !== false;
 
     if (el('controller-mirror-checkbox')) el('controller-mirror-checkbox').checked = mirrorVal;
-    if (el('controller-vcam-checkbox'))   el('controller-vcam-checkbox').checked = vcamVal;
+    if (el('mirror-checkbox')) el('mirror-checkbox').checked = mirrorVal;
 
     // Sync orientation
-    const oriVal = el('orientation-select')?.value || '0';
+    const oriVal = el('orientation-select')?.value || el('controller-orientation-select')?.value || '0';
     if (el('controller-orientation-select')) el('controller-orientation-select').value = oriVal;
+    if (el('orientation-select')) el('orientation-select').value = oriVal;
 
     // Sync Zoom
-    const zoomVal = el('zoom-select')?.value || '1.0';
+    const zoomVal = el('zoom-select')?.value || el('controller-zoom-select')?.value || '1.0';
     if (el('controller-zoom-select')) el('controller-zoom-select').value = zoomVal;
+    if (el('zoom-select')) el('zoom-select').value = zoomVal;
     const ztxt = parseFloat(zoomVal).toFixed(1) + 'x';
     if (el('controller-zoom-val')) el('controller-zoom-val').textContent = ztxt;
+    if (el('zoom-val')) el('zoom-val').textContent = ztxt;
     _updateZoomKnob(zoomVal);
+
+    // Sync Resolution
+    const resVal = el('resolution-select')?.value || el('controller-resolution-select')?.value || 'auto';
+    if (el('controller-resolution-select')) el('controller-resolution-select').value = resVal;
+    if (el('resolution-select')) el('resolution-select').value = resVal;
+
+    // Sync FPS
+    const fpsVal = el('fps-select')?.value || el('controller-fps-select')?.value || '30';
+    if (el('controller-fps-select')) el('controller-fps-select').value = fpsVal;
+    if (el('fps-select')) el('fps-select').value = fpsVal;
 
     _updateLEDs();
   }
@@ -153,14 +166,14 @@ const Config = (() => {
   // ── Orientation ───────────────────────────────────────────────────────────
 
   function onOrientationChange() {
-    const deg = parseInt(el('orientation-select')?.value || 0, 10);
+    const deg = parseInt(el('orientation-select')?.value || el('controller-orientation-select')?.value || 0, 10);
     if (el('controller-orientation-select')) el('controller-orientation-select').value = String(deg);
     Stream.setOrientation(deg);
     update();
   }
 
   function onOrientationChangeFromController() {
-    const deg = parseInt(el('controller-orientation-select')?.value || 0, 10);
+    const deg = parseInt(el('controller-orientation-select')?.value || el('orientation-select')?.value || 0, 10);
     if (el('orientation-select')) el('orientation-select').value = String(deg);
     Stream.setOrientation(deg);
     update();
@@ -262,6 +275,7 @@ const Config = (() => {
     if (el('blur-range'))       el('blur-range').value       = 0;
     if (el('controller-blur-range'))       el('controller-blur-range').value       = 0;
     if (el('fps-select'))       el('fps-select').value       = '30';
+    if (el('controller-fps-select')) el('controller-fps-select').value = '30';
 
     if (el('brightness-val')) el('brightness-val').textContent = '0.00';
     if (el('controller-brightness-val')) el('controller-brightness-val').textContent = '0.00';
@@ -302,9 +316,13 @@ const Config = (() => {
   function updateFromController() {
     const mirrorVal = !!el('controller-mirror-checkbox')?.checked;
     const vcamVal   = el('controller-vcam-checkbox')?.checked !== false;
+    const resVal    = el('controller-resolution-select')?.value || 'auto';
+    const fpsVal    = el('controller-fps-select')?.value || '30';
 
     if (el('mirror-checkbox')) el('mirror-checkbox').checked = mirrorVal;
     if (el('vcam-checkbox'))   el('vcam-checkbox').checked = vcamVal;
+    if (el('resolution-select')) el('resolution-select').value = resVal;
+    if (el('fps-select')) el('fps-select').value = fpsVal;
 
     _updateLEDs();
     update();
@@ -316,18 +334,17 @@ const Config = (() => {
     _syncUIFromStandard();
 
     const payload = {
-      resolution:  el('resolution-select')?.value            || 'auto',
-      mirror:      el('mirror-checkbox')?.checked            || false,
-      orientation: Number(el('orientation-select')?.value    || 0),
-      vcamEnabled: el('vcam-checkbox')?.checked              !== false,
-      zoom:        parseFloat(el('zoom-select')?.value       || 1.0),
-      // Video processing
-      brightness:  parseFloat(el('brightness-range')?.value || 0.0),
-      contrast:    parseFloat(el('contrast-range')?.value   || 1.0),
-      saturation:  parseFloat(el('saturation-range')?.value || 1.0),
-      sharpness:   parseFloat(el('sharpness-range')?.value  || 0.0),
-      blur:        parseInt(el('blur-range')?.value         || 0, 10),
-      targetFps:   parseInt(el('fps-select')?.value         || 30, 10),
+      resolution:  el('controller-resolution-select')?.value || el('resolution-select')?.value || 'auto',
+      mirror:      (el('controller-mirror-checkbox') ? el('controller-mirror-checkbox').checked : (el('mirror-checkbox')?.checked || false)),
+      orientation: Number(el('controller-orientation-select')?.value || el('orientation-select')?.value || 0),
+      vcamEnabled: (el('controller-vcam-checkbox') ? el('controller-vcam-checkbox').checked : (el('vcam-checkbox')?.checked !== false)),
+      zoom:        parseFloat(el('controller-zoom-select')?.value || el('zoom-select')?.value || 1.0),
+      brightness:  parseFloat(el('controller-brightness-range')?.value || el('brightness-range')?.value || 0.0),
+      contrast:    parseFloat(el('controller-contrast-range')?.value || el('contrast-range')?.value || 1.0),
+      saturation:  parseFloat(el('controller-saturation-range')?.value || el('saturation-range')?.value || 1.0),
+      sharpness:   parseFloat(el('controller-sharpness-range')?.value || el('sharpness-range')?.value || 0.0),
+      blur:        parseInt(el('controller-blur-range')?.value || el('blur-range')?.value || 0, 10),
+      targetFps:   parseInt(el('controller-fps-select')?.value || el('fps-select')?.value || 30, 10),
     };
 
     console.log(

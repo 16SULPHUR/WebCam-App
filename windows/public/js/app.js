@@ -111,55 +111,56 @@ const Toast = {
       }
     });
 
-    // ── Tab Navigation ─────────────────────────────────────────────────────────
-    const navTabs = document.querySelectorAll('.nav-tab');
-    const tabContents = document.querySelectorAll('.tab-content');
+    // ── Rotary Zoom Knob Interaction ─────────────────────────────────────────
+    const knobZone = document.getElementById('zoom-knob-drag-zone');
+    const zoomInput = document.getElementById('controller-zoom-select');
+    
+    if (knobZone && zoomInput) {
+      let isDragging = false;
+      let startPointerAngle = 0;
+      let startZoom = 1.0;
 
-    navTabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        const targetTab = tab.dataset.tab;
+      knobZone.addEventListener('pointerdown', (e) => {
+        isDragging = true;
+        knobZone.setPointerCapture(e.pointerId);
 
-        // Update active tab button class
-        navTabs.forEach(t => t.classList.toggle('active', t === tab));
+        const rect = knobZone.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
 
-        // Update active tab content class
-        tabContents.forEach(content => {
-          const isActive = content.id === `tab-${targetTab}`;
-          content.classList.toggle('active', isActive);
-        });
+        startPointerAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180 / Math.PI;
+        startZoom = parseFloat(zoomInput.value) || 1.0;
+
+        e.preventDefault();
       });
-    });
 
-    // ── Mobile Controller Mode Toggle ──────────────────────────────────────────
-    const btnToggle = document.getElementById('btn-ui-toggle');
-    if (btnToggle) {
-      btnToggle.style.display = '';
+      knobZone.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
 
-      btnToggle.addEventListener('click', () => {
-        const isController = document.body.classList.toggle('controller-mode-active');
-        btnToggle.textContent = isController ? '📋 Standard' : '📟 Controller';
+        const rect = knobZone.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
 
-        const feedImg = document.getElementById('feed-img');
-        const feedPH = document.getElementById('feed-placeholder');
-        const feedOverlay = document.getElementById('feed-overlay');
+        const currPointerAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180 / Math.PI;
+        
+        let deltaAngle = currPointerAngle - startPointerAngle;
+        if (deltaAngle > 180) deltaAngle -= 360;
+        if (deltaAngle < -180) deltaAngle += 360;
 
-        if (isController) {
-          const wrapper = document.getElementById('controller-feed-img-wrapper');
-          if (wrapper) {
-            if (feedImg) wrapper.appendChild(feedImg);
-            if (feedPH) wrapper.appendChild(feedPH);
-            if (feedOverlay) wrapper.appendChild(feedOverlay);
-          }
-        } else {
-          const wrapper = document.getElementById('feed-img-wrapper');
-          const container = document.getElementById('feed-container');
-          if (wrapper && feedImg) wrapper.appendChild(feedImg);
-          if (container) {
-            if (feedPH) container.appendChild(feedPH);
-            if (feedOverlay) container.appendChild(feedOverlay);
-          }
-        }
+        const deltaZoom = deltaAngle * (2.0 / 270);
+        let newZoom = startZoom + deltaZoom;
+        
+        newZoom = Math.max(1.0, Math.min(3.0, newZoom));
+        
+        Config.onZoomChange(newZoom.toFixed(1));
       });
+
+      const stopDrag = () => {
+        isDragging = false;
+      };
+
+      knobZone.addEventListener('pointerup', stopDrag);
+      knobZone.addEventListener('pointercancel', stopDrag);
     }
   }
 
