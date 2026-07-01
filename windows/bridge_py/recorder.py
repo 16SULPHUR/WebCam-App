@@ -31,6 +31,11 @@ class RecordingManager:
         self._proc: Optional[subprocess.Popen] = None
         self._filepath: Optional[str]          = None
         self._lock     = threading.Lock()
+        self._sps_pps  = b""
+
+    def clear_codec_config(self) -> None:
+        with self._lock:
+            self._sps_pps = b""
 
     # ── Public ───────────────────────────────────────────────────────────────
 
@@ -43,7 +48,7 @@ class RecordingManager:
     def filepath(self) -> Optional[str]:
         return self._filepath
 
-    def start(self) -> str:
+    def start(self, fps: int = 30) -> str:
         """Start recording. Returns the output file path."""
         with self._lock:
             if self._proc and self._proc.poll() is None:
@@ -56,6 +61,7 @@ class RecordingManager:
                     self._ffmpeg,
                     "-hide_banner", "-loglevel", "warning",
                     "-f", "h264", "-i", "pipe:0",
+                    "-bsf:v", f"setts=ts=N/{fps}/TB",
                     "-c:v", "copy",
                     "-movflags", "+faststart",
                     path,
@@ -70,7 +76,13 @@ class RecordingManager:
                 target=self._read_stderr, args=(self._proc,),
                 daemon=True, name="RecorderStderr",
             ).start()
-            print(f"[Record] Started → {path}")
+            if self._sps_pps:
+                try:
+                    self._proc.stdin.write(self._sps_pps)
+                    self._proc.stdin.flush()
+                except Exception:
+                    pass
+            print(f"[Record] Started -> {path}")
             self._bc.update_stats(recording=True)
             self._bc.broadcast_status()
             return path
@@ -99,12 +111,47 @@ class RecordingManager:
     def feed(self, chunk: bytes) -> None:
         """Write a raw H.264 chunk to the recording process stdin."""
         with self._lock:
+            if not self._sps_pps:
+                self._sps_pps = self._extract_sps_pps(chunk)
             if self._proc and self._proc.poll() is None:
                 try:
                     self._proc.stdin.write(chunk)
                     self._proc.stdin.flush()
                 except Exception:
                     pass
+
+    def _extract_sps_pps(self, chunk: bytes) -> bytes:
+        sps = b""
+        pps = b""
+        pos = 0
+        offsets = []
+        while True:
+            idx = chunk.find(b'\x00\x00\x01', pos)
+            if idx == -1:
+                break
+            offsets.append(idx)
+            pos = idx + 3
+            
+        for idx_arr, start_idx in enumerate(offsets):
+            end_idx = offsets[idx_arr + 1] if idx_arr + 1 < len(offsets) else len(chunk)
+            nal = chunk[start_idx:end_idx]
+            
+            header_offset = 3
+            if len(nal) > 3 and nal[0] == 0 and nal[1] == 0 and nal[2] == 1:
+                header_offset = 3
+            elif len(nal) > 4 and nal[0] == 0 and nal[1] == 0 and nal[2] == 0 and nal[3] == 1:
+                header_offset = 4
+            else:
+                continue
+                
+            if len(nal) > header_offset:
+                nal_type = nal[header_offset] & 0x1F
+                if nal_type == 7:
+                    sps = nal
+                elif nal_type == 8:
+                    pps = nal
+                    
+        return sps + pps
 
     def kill(self) -> None:
         """Forcefully terminate any in-progress recording."""

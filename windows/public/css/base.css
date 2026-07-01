@@ -406,6 +406,12 @@ h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.4px; }
   letter-spacing: 0.8px;
   margin-bottom: 4px;
 }
+.settings-section-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: -8px 0 0;
+  line-height: 1.5;
+}
 
 .setting-row {
   display: flex;
@@ -628,6 +634,107 @@ h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.4px; }
   display: block !important;
   width: 100%;
 }
+
+/* ── Virtual Background UI ────────────────────────────────────────────────── */
+.bg-mode-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bg-mode-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border, rgba(255,255,255,0.1));
+  background: rgba(255,255,255,0.04);
+  color: var(--text-sub, #9ca3af);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.bg-mode-pill:hover {
+  background: rgba(255,255,255,0.09);
+  color: var(--text-main, #fff);
+  border-color: rgba(255,255,255,0.2);
+}
+.bg-mode-pill.active {
+  background: rgba(6,182,212,0.15);
+  border-color: rgba(6,182,212,0.5);
+  color: #06b6d4;
+}
+
+.bg-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bg-thumb {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  aspect-ratio: 16/9;
+  background: rgba(255,255,255,0.04);
+}
+.bg-thumb:hover {
+  border-color: rgba(255,255,255,0.3);
+  transform: scale(1.03);
+}
+.bg-thumb.selected {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 1px rgba(6,182,212,0.4);
+}
+.bg-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.bg-thumb-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.65));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 6px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.bg-thumb .selected-tick {
+  display: none;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: #06b6d4;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+}
+.bg-thumb.selected .selected-tick {
+  display: flex;
+}
+
+.bg-grid-loading {
+  color: var(--text-muted, #6b7280);
+  font-size: 12px;
+  padding: 12px 0;
+}
+
 
 
 

@@ -144,6 +144,22 @@
                         android:minHeight="0dp"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSwitchMode"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ROLE"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:textColor="#f59e0b"
+                        android:padding="0dp"
+                        android:layout_marginStart="12dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"/>
                 </LinearLayout>
 
                 <TextView
@@ -387,6 +403,17 @@
                     android:textSize="13sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+
+        <!-- Remember Choice Checkbox -->
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/cbRememberChoice"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Remember my choice"
+            android:textColor="#9ca3af"
+            android:textSize="14sp"
+            android:layout_marginTop="20dp"
+            app:buttonTint="#06b6d4" />
 
     </LinearLayout>
 

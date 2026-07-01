@@ -26,6 +26,9 @@ public final class ActivityControlBinding implements ViewBinding {
   private final CoordinatorLayout rootView;
 
   @NonNull
+  public final MaterialButton btnCapture;
+
+  @NonNull
   public final MaterialButton btnConnect;
 
   @NonNull
@@ -101,18 +104,19 @@ public final class ActivityControlBinding implements ViewBinding {
   public final TextView tvZoomValue;
 
   private ActivityControlBinding(@NonNull CoordinatorLayout rootView,
-      @NonNull MaterialButton btnConnect, @NonNull MaterialButton btnRecord,
-      @NonNull MaterialButton btnResetFilters, @NonNull MaterialButton btnResetPipeline,
-      @NonNull TextInputEditText etBridgeIp, @NonNull SeekBar sbBlur, @NonNull SeekBar sbBrightness,
-      @NonNull SeekBar sbContrast, @NonNull SeekBar sbSaturation, @NonNull SeekBar sbSharpness,
-      @NonNull SeekBar sbZoom, @NonNull Spinner spCameraFacing, @NonNull Spinner spFps,
-      @NonNull Spinner spOrientation, @NonNull Spinner spResolution,
-      @NonNull SwitchMaterial swMirror, @NonNull SwitchMaterial swVcam, @NonNull Toolbar toolbar,
-      @NonNull TextView tvBlurValue, @NonNull TextView tvBrightnessValue,
-      @NonNull TextView tvConnectionStatus, @NonNull TextView tvContrastValue,
-      @NonNull TextView tvSaturationValue, @NonNull TextView tvSharpnessValue,
-      @NonNull TextView tvZoomValue) {
+      @NonNull MaterialButton btnCapture, @NonNull MaterialButton btnConnect,
+      @NonNull MaterialButton btnRecord, @NonNull MaterialButton btnResetFilters,
+      @NonNull MaterialButton btnResetPipeline, @NonNull TextInputEditText etBridgeIp,
+      @NonNull SeekBar sbBlur, @NonNull SeekBar sbBrightness, @NonNull SeekBar sbContrast,
+      @NonNull SeekBar sbSaturation, @NonNull SeekBar sbSharpness, @NonNull SeekBar sbZoom,
+      @NonNull Spinner spCameraFacing, @NonNull Spinner spFps, @NonNull Spinner spOrientation,
+      @NonNull Spinner spResolution, @NonNull SwitchMaterial swMirror,
+      @NonNull SwitchMaterial swVcam, @NonNull Toolbar toolbar, @NonNull TextView tvBlurValue,
+      @NonNull TextView tvBrightnessValue, @NonNull TextView tvConnectionStatus,
+      @NonNull TextView tvContrastValue, @NonNull TextView tvSaturationValue,
+      @NonNull TextView tvSharpnessValue, @NonNull TextView tvZoomValue) {
     this.rootView = rootView;
+    this.btnCapture = btnCapture;
     this.btnConnect = btnConnect;
     this.btnRecord = btnRecord;
     this.btnResetFilters = btnResetFilters;
@@ -167,6 +171,12 @@ public final class ActivityControlBinding implements ViewBinding {
     // This is done to optimize the compiled bytecode for size and performance.
     int id;
     missingId: {
+      id = R.id.btnCapture;
+      MaterialButton btnCapture = ViewBindings.findChildViewById(rootView, id);
+      if (btnCapture == null) {
+        break missingId;
+      }
+
       id = R.id.btnConnect;
       MaterialButton btnConnect = ViewBindings.findChildViewById(rootView, id);
       if (btnConnect == null) {
@@ -317,11 +327,11 @@ public final class ActivityControlBinding implements ViewBinding {
         break missingId;
       }
 
-      return new ActivityControlBinding((CoordinatorLayout) rootView, btnConnect, btnRecord,
-          btnResetFilters, btnResetPipeline, etBridgeIp, sbBlur, sbBrightness, sbContrast,
-          sbSaturation, sbSharpness, sbZoom, spCameraFacing, spFps, spOrientation, spResolution,
-          swMirror, swVcam, toolbar, tvBlurValue, tvBrightnessValue, tvConnectionStatus,
-          tvContrastValue, tvSaturationValue, tvSharpnessValue, tvZoomValue);
+      return new ActivityControlBinding((CoordinatorLayout) rootView, btnCapture, btnConnect,
+          btnRecord, btnResetFilters, btnResetPipeline, etBridgeIp, sbBlur, sbBrightness,
+          sbContrast, sbSaturation, sbSharpness, sbZoom, spCameraFacing, spFps, spOrientation,
+          spResolution, swMirror, swVcam, toolbar, tvBlurValue, tvBrightnessValue,
+          tvConnectionStatus, tvContrastValue, tvSaturationValue, tvSharpnessValue, tvZoomValue);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

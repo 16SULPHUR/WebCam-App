@@ -68,6 +68,7 @@ class Pipeline:
         self._stdout_bytes  = 0
         self._frame_size    = 1280 * 720 * 3  # updated on start
         self._decoded_frames = 0
+        self._latest_jpeg: Optional[bytes] = None
 
         # VCam circuit-breaker
         self._vcam_failures      = 0
@@ -127,6 +128,10 @@ class Pipeline:
     @property
     def decoded_frames(self) -> int:
         return self._decoded_frames
+
+    @property
+    def latest_jpeg(self) -> Optional[bytes]:
+        return self._latest_jpeg
 
     def set_on_stop(self, callback: Callable[[], None]) -> None:
         self._on_stop = callback
@@ -310,6 +315,8 @@ class Pipeline:
                     if not chunk:
                         return  # truncated frame at EOF
                     jpeg_bytes += chunk
+
+                self._latest_jpeg = jpeg_bytes
 
                 # Construct MJPEG boundary chunk
                 boundary = (

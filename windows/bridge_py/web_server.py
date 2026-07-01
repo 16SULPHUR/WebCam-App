@@ -22,6 +22,7 @@ import mimetypes
 import os
 import queue
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
 from urllib.parse import urlparse
@@ -42,12 +43,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
       - recorder    : RecordingManager
       - public_dir  : str — absolute path to the public/ folder
     """
-    config:      ConfigManager      = None   # type: ignore[assignment]
-    broadcaster: EventBroadcaster   = None   # type: ignore[assignment]
-    _pipeline_ref = None                     # set by BridgeServer
-    _tcp_client_ref = None                   # set by BridgeServer
-    recorder:    RecordingManager   = None   # type: ignore[assignment]
-    public_dir:  str                = ""
+    config:        ConfigManager      = None   # type: ignore[assignment]
+    broadcaster:   EventBroadcaster   = None   # type: ignore[assignment]
+    _pipeline_ref  = None                      # set by BridgeServer
+    _tcp_client_ref = None                     # set by BridgeServer
+    recorder:      RecordingManager   = None   # type: ignore[assignment]
+    public_dir:    str                = ""
+    backgrounds_dir: str              = ""     # absolute path to backgrounds/ folder
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
@@ -71,6 +73,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     **self.broadcaster.get_stats(),
                     "config": self.config.to_dict(),
                 })
+            elif path == "/api/backgrounds":
+                self._handle_list_backgrounds()
+            elif path.startswith("/backgrounds/"):
+                self._handle_serve_background(path)
             elif path.startswith("/video_feed"):
                 self._handle_video()
             elif path == "/logs":
@@ -103,6 +109,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._handle_record_stop()
             elif path == "/api/record/toggle":
                 self._handle_record_toggle()
+            elif path == "/api/record/snapshot":
+                self._handle_record_snapshot()
             else:
                 self.send_error(404)
         except Exception as exc:
@@ -267,14 +275,15 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json({"error": "No active stream to record"}, 400)
             return
         try:
-            path = self.recorder.start()
+            fps = self.config.get("targetFps", 30)
+            path = self.recorder.start(fps=fps)
             self._json({
                 "success": True,
                 "file": path,
                 **self.broadcaster.get_stats(),
                 "config": self.config.to_dict(),
             })
-            self.broadcaster.broadcast_log("system", f"✓ Recording started → {path}")
+            self.broadcaster.broadcast_log("system", f"Recording started -> {path}")
         except Exception as exc:
             self._json({"error": str(exc)}, 500)
 
@@ -290,7 +299,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 **self.broadcaster.get_stats(),
                 "config": self.config.to_dict(),
             })
-            self.broadcaster.broadcast_log("system", f"✓ Recording stopped → {path}")
+            self.broadcaster.broadcast_log("system", f"Recording stopped -> {path}")
         except Exception as exc:
             self._json({"error": str(exc)}, 500)
 
@@ -299,6 +308,59 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._handle_record_stop()
         else:
             self._handle_record_start()
+
+    def _handle_record_snapshot(self) -> None:
+        jpeg_data = self._pipeline_ref.latest_jpeg if self._pipeline_ref else None
+        if not jpeg_data:
+            self._json({"error": "No active stream to capture"}, 400)
+            return
+        try:
+            ts = time.strftime("%Y-%m-%dT%H-%M-%S")
+            filename = f"snapshot-{ts}.jpg"
+            path = os.path.join(self.recorder._out_dir, filename)
+            with open(path, "wb") as fh:
+                fh.write(jpeg_data)
+            self._json({
+                "success": True,
+                "file": path,
+                **self.broadcaster.get_stats(),
+                "config": self.config.to_dict(),
+            })
+            self.broadcaster.broadcast_log("system", f"Snapshot saved -> {path}")
+        except Exception as exc:
+            self._json({"error": str(exc)}, 500)
+
+    # ── Backgrounds ───────────────────────────────────────────────────────────
+
+    def _handle_list_backgrounds(self) -> None:
+        """Return JSON list of background images available in the backgrounds/ folder."""
+        bg_dir = self.backgrounds_dir
+        images = []
+        if os.path.isdir(bg_dir):
+            for fname in sorted(os.listdir(bg_dir)):
+                ext = os.path.splitext(fname)[1].lower()
+                if ext in (".jpg", ".jpeg", ".png", ".webp"):
+                    images.append({"filename": fname, "url": f"/backgrounds/{fname}"})
+        self._json({"backgrounds": images})
+
+    def _handle_serve_background(self, path: str) -> None:
+        """Serve a background image file from the backgrounds/ directory."""
+        filename = os.path.basename(path)  # sanitise — no path traversal
+        abs_path = os.path.join(self.backgrounds_dir, filename)
+        if not os.path.isfile(abs_path):
+            self.send_error(404)
+            return
+        mime, _ = mimetypes.guess_type(abs_path)
+        mime = mime or "application/octet-stream"
+        with open(abs_path, "rb") as fh:
+            data = fh.read()
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "max-age=3600")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(data)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -344,10 +406,14 @@ class BridgeServer:
         self._server: Optional[ThreadingBridgeHTTPServer] = None
 
         # Inject shared state into the handler class
-        BridgeHandler.config      = config
-        BridgeHandler.broadcaster = broadcaster
-        BridgeHandler.recorder    = recorder
-        BridgeHandler.public_dir  = os.path.realpath(public_dir)
+        BridgeHandler.config          = config
+        BridgeHandler.broadcaster     = broadcaster
+        BridgeHandler.recorder        = recorder
+        BridgeHandler.public_dir      = os.path.realpath(public_dir)
+        # Backgrounds folder sits next to public_dir (i.e. windows/backgrounds/)
+        BridgeHandler.backgrounds_dir = os.path.realpath(
+            os.path.join(os.path.dirname(public_dir), "backgrounds")
+        )
 
     def set_pipeline(self, pipeline) -> None:
         """Wire up the Pipeline reference (avoids circular imports)."""

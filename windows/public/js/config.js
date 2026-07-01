@@ -39,6 +39,12 @@ const Config = (() => {
       if (el('mirror-checkbox'))   el('mirror-checkbox').checked  = !!cfg.mirror;
       if (el('orientation-select')) el('orientation-select').value = String(cfg.orientation ?? 0);
       if (el('vcam-checkbox'))     el('vcam-checkbox').checked    = cfg.vcamEnabled !== false;
+      if (el('camera-facing-select')) el('camera-facing-select').value = cfg.cameraFacing || 'back';
+
+      // Virtual background
+      const bgMode = cfg.bgMode || 'none';
+      const bgImg  = cfg.bgImage || '';
+      _applyBgModeToUI(bgMode, bgImg);
 
       const zoom = cfg.zoom ?? 1.0;
       if (el('zoom-select')) el('zoom-select').value = zoom;
@@ -159,6 +165,11 @@ const Config = (() => {
     const fpsVal = el('fps-select')?.value || el('controller-fps-select')?.value || '30';
     if (el('controller-fps-select')) el('controller-fps-select').value = fpsVal;
     if (el('fps-select')) el('fps-select').value = fpsVal;
+
+    // Sync Camera Facing
+    const camVal = el('camera-facing-select')?.value || el('controller-camera-facing-select')?.value || 'back';
+    if (el('controller-camera-facing-select')) el('controller-camera-facing-select').value = camVal;
+    if (el('camera-facing-select')) el('camera-facing-select').value = camVal;
 
     _updateLEDs();
   }
@@ -328,6 +339,89 @@ const Config = (() => {
     update();
   }
 
+  // ── Virtual Background ────────────────────────────────────────────────────
+
+  let _bgMode = 'none';
+  let _bgImage = '';
+  let _bgImagesLoaded = false;
+
+  function _applyBgModeToUI(mode, image) {
+    _bgMode = mode;
+    _bgImage = image;
+
+    // Update pill buttons
+    document.querySelectorAll('.bg-mode-pill').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+
+    // Show/hide sub-sections
+    const blurHint = el('bg-blur-hint');
+    const gridWrap = el('bg-image-grid-wrap');
+    if (blurHint) blurHint.style.display = mode === 'blur'    ? '' : 'none';
+    if (gridWrap) gridWrap.style.display  = mode === 'replace' ? '' : 'none';
+
+    // Load background images when entering replace mode for the first time
+    if (mode === 'replace' && !_bgImagesLoaded) {
+      loadBackgrounds(image);
+    } else if (mode === 'replace') {
+      _syncGridSelection(image);
+    }
+  }
+
+  function setBgMode(mode) {
+    _bgMode = mode;
+    _applyBgModeToUI(mode, _bgImage);
+    update();
+  }
+
+  async function loadBackgrounds(selectedImage) {
+    _bgImagesLoaded = true;
+    const grid = el('bg-image-grid');
+    if (!grid) return;
+    grid.innerHTML = '<div class="bg-grid-loading">Loading backgrounds…</div>';
+    try {
+      const res = await fetch('/api/backgrounds');
+      if (!res.ok) throw new Error(res.statusText);
+      const data = await res.json();
+      const items = data.backgrounds || [];
+      if (items.length === 0) {
+        grid.innerHTML = '<div class="bg-grid-loading">No backgrounds found. Add images to the <code>backgrounds/</code> folder.</div>';
+        return;
+      }
+      grid.innerHTML = '';
+      items.forEach(item => {
+        const thumb = document.createElement('div');
+        const curSelected = selectedImage !== undefined ? selectedImage : _bgImage;
+        thumb.className = 'bg-thumb' + (item.filename === curSelected ? ' selected' : '');
+        thumb.dataset.filename = item.filename;
+        const label = item.filename.replace(/\.[^.]+$/, '');
+        thumb.innerHTML = `
+          <img src="${item.url}" alt="${label}" loading="lazy">
+          <div class="bg-thumb-label">${label}</div>
+          <div class="selected-tick">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        `;
+        thumb.addEventListener('click', () => _selectBackground(item.filename));
+        grid.appendChild(thumb);
+      });
+    } catch (err) {
+      grid.innerHTML = `<div class="bg-grid-loading">Failed to load backgrounds: ${err.message}</div>`;
+    }
+  }
+
+  function _selectBackground(filename) {
+    _bgImage = filename;
+    _syncGridSelection(filename);
+    update();
+  }
+
+  function _syncGridSelection(filename) {
+    document.querySelectorAll('.bg-thumb').forEach(t => {
+      t.classList.toggle('selected', t.dataset.filename === filename);
+    });
+  }
+
   // ── Save / Update ─────────────────────────────────────────────────────────
 
   async function update() {
@@ -345,6 +439,9 @@ const Config = (() => {
       sharpness:   parseFloat(el('controller-sharpness-range')?.value || el('sharpness-range')?.value || 0.0),
       blur:        parseInt(el('controller-blur-range')?.value || el('blur-range')?.value || 0, 10),
       targetFps:   parseInt(el('controller-fps-select')?.value || el('fps-select')?.value || 30, 10),
+      cameraFacing: el('controller-camera-facing-select')?.value || el('camera-facing-select')?.value || 'back',
+      bgMode:      _bgMode,
+      bgImage:     _bgImage,
     };
 
     console.log(
@@ -380,6 +477,6 @@ const Config = (() => {
     }
   }
 
-  return { load, update, onOrientationChange, onZoomChange, onProcessingChange, resetProcessing, resetSingle, updateFromController, onOrientationChangeFromController };
+  return { load, update, onOrientationChange, onZoomChange, onProcessingChange, resetProcessing, resetSingle, updateFromController, onOrientationChangeFromController, setBgMode, loadBackgrounds };
 })();
 

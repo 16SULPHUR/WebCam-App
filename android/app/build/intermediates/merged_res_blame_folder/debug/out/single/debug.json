@@ -24,10 +24,6 @@
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\layout\\widget_control.xml"
     },
     {
-        "merged": "com.example.usbwebcambridge.app-merged_res-31:/layout_widget_control.xml.flat",
-        "source": "com.example.usbwebcambridge.app-main-33:/layout/widget_control.xml"
-    },
-    {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_gradient_bottom_overlay.xml.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\gradient_bottom_overlay.xml"
     },
@@ -42,6 +38,10 @@
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_dot_inactive.xml.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_dot_inactive.xml"
+    },
+    {
+        "merged": "com.example.usbwebcambridge.app-merged_res-31:/layout_activity_control.xml.flat",
+        "source": "com.example.usbwebcambridge.app-main-33:/layout/activity_control.xml"
     },
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\layout_activity_control.xml.flat",

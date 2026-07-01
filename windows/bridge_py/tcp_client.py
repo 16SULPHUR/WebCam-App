@@ -135,7 +135,7 @@ class AndroidTcpClient:
 
         self._bc.update_stats(androidConnected=True, h264ReceivedBytes=self._total_bytes)
         self._bc.broadcast_status()
-        self._bc.broadcast_log("node", "[Bridge] ✓ Connected to Android stream!")
+        self._bc.broadcast_log("node", "[Bridge] [OK] Connected to Android stream!")
         print("[Bridge] [OK] Connected to Android stream!")
 
         if self._on_connect:

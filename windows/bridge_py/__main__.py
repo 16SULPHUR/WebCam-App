@@ -94,6 +94,7 @@ def main() -> None:
     def on_disconnect():
         broadcaster.update_stats(androidConnected=False)
         broadcaster.broadcast_status()
+        recorder.clear_codec_config()
         pipeline.restart("Android disconnected - pipeline reset")
 
     tcp_client = AndroidTcpClient(

@@ -21,6 +21,7 @@ class ControlActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
 
     private lateinit var btnRecord: MaterialButton
+    private lateinit var btnCapture: MaterialButton
     private lateinit var btnResetPipeline: MaterialButton
 
     private lateinit var sbBrightness: SeekBar
@@ -90,6 +91,7 @@ class ControlActivity : AppCompatActivity() {
         tvStatus = findViewById(R.id.tvConnectionStatus)
 
         btnRecord = findViewById(R.id.btnRecord)
+        btnCapture = findViewById(R.id.btnCapture)
         btnResetPipeline = findViewById(R.id.btnResetPipeline)
 
         sbBrightness = findViewById(R.id.sbBrightness)
@@ -249,10 +251,10 @@ class ControlActivity : AppCompatActivity() {
 
     private fun updateRecordButtonUi() {
         if (isRecordingState) {
-            btnRecord.text = "Stop Recording"
+            btnRecord.text = "Stop"
             btnRecord.setBackgroundColor(0xffef4444.toInt()) // Red
         } else {
-            btnRecord.text = "Record MP4"
+            btnRecord.text = "Record"
             btnRecord.setBackgroundColor(0xff3b82f6.toInt()) // Blue (or original default color)
         }
     }
@@ -376,6 +378,20 @@ class ControlActivity : AppCompatActivity() {
             })
         }
 
+        btnCapture.setOnClickListener {
+            val baseUrl = getBaseUrl()
+            if (baseUrl.isEmpty()) return@setOnClickListener
+
+            NetworkHelper.postJson("$baseUrl/api/record/snapshot", "{}", object : NetworkHelper.Callback<String> {
+                override fun onSuccess(result: String) {
+                    Toast.makeText(this@ControlActivity, "Snapshot captured", Toast.LENGTH_SHORT).show()
+                }
+                override fun onError(error: Exception) {
+                    Toast.makeText(this@ControlActivity, "Capture failed: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
+            })
+        }
+
         // Sliders (Update textual label live on progress, save only when slider is released)
         sbBrightness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -444,5 +460,24 @@ class ControlActivity : AppCompatActivity() {
         spFps.onItemSelectedListener = spinnerListener
         spOrientation.onItemSelectedListener = spinnerListener
         spCameraFacing.onItemSelectedListener = spinnerListener
+    }
+
+    override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
+        menu?.add(0, 1001, 0, "Switch Mode")?.apply {
+            setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        }
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        if (item.itemId == 1001) {
+            prefs.edit().remove("remembered_role").apply()
+            val intent = android.content.Intent(this, MainActivity::class.java)
+            intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+            startActivity(intent)
+            finish()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
     }
 }

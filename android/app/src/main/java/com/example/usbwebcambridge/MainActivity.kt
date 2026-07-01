@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvRecBadge: TextView
     private lateinit var btnToggle: Button   // hidden, kept for compat
     private lateinit var btnSwitchCamera: Button
+    private lateinit var btnSwitchMode: Button
     private lateinit var streamer: CameraStreamer
 
     private var isStreaming = false
@@ -41,6 +42,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val prefs = getSharedPreferences("WebcamPrefs", Context.MODE_PRIVATE)
+        val rememberedRole = prefs.getString("remembered_role", null)
+
+        if (rememberedRole == "controller") {
+            val intent = android.content.Intent(this, ControlActivity::class.java)
+            startActivity(intent)
+            finish()
+            return
+        } else if (rememberedRole == "streamer") {
+            isStreamerModeSelected = true
+        }
 
         // Make the activity full-screen and keep screen on while streaming
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -52,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         tvRecBadge    = findViewById(R.id.tvRecBadge)
         btnToggle     = findViewById(R.id.btnToggle)
         btnSwitchCamera = findViewById(R.id.btnSwitchCamera)
+        btnSwitchMode = findViewById(R.id.btnSwitchMode)
 
         btnSwitchCamera.setOnClickListener {
             showCameraSelectionDialog()
@@ -60,8 +74,20 @@ class MainActivity : AppCompatActivity() {
         val overlay = findViewById<View>(R.id.modeSelectionOverlay)
         val cardStreamer = findViewById<View>(R.id.cardStreamerMode)
         val cardController = findViewById<View>(R.id.cardControllerMode)
+        val cbRememberChoice = findViewById<android.widget.CheckBox>(R.id.cbRememberChoice)
+
+        btnSwitchMode.setOnClickListener {
+            // Clear remembered role
+            prefs.edit().remove("remembered_role").apply()
+            isStreamerModeSelected = false
+            stopStreaming()
+            overlay.visibility = View.VISIBLE
+        }
 
         cardStreamer.setOnClickListener {
+            if (cbRememberChoice.isChecked) {
+                prefs.edit().putString("remembered_role", "streamer").apply()
+            }
             isStreamerModeSelected = true
             overlay.visibility = View.GONE
             if (cameraPreview.isAvailable) {
@@ -71,8 +97,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         cardController.setOnClickListener {
+            if (cbRememberChoice.isChecked) {
+                prefs.edit().putString("remembered_role", "controller").apply()
+            }
             val intent = android.content.Intent(this, ControlActivity::class.java)
             startActivity(intent)
+            if (cbRememberChoice.isChecked) {
+                finish()
+            }
         }
 
         streamer = CameraStreamer(this) { status ->
@@ -105,6 +137,8 @@ class MainActivity : AppCompatActivity() {
         val overlay = findViewById<View>(R.id.modeSelectionOverlay)
         if (!isStreamerModeSelected) {
             overlay.visibility = View.VISIBLE
+        } else {
+            overlay.visibility = View.GONE
         }
         // If the TextureView is already available and we're streaming, start now
         if (isStreamerModeSelected && !isStreaming && cameraPreview.isAvailable) {

@@ -147,7 +147,6 @@ class CameraStreamer(
     // ─────────────────────────────────────────────────────────────────────────
     // MediaCodec Encoder Setup
     // ─────────────────────────────────────────────────────────────────────────
-
     private fun setupEncoder() {
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, VIDEO_WIDTH, VIDEO_HEIGHT).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
@@ -160,6 +159,11 @@ class CameraStreamer(
             setInteger(MediaFormat.KEY_LATENCY, 0)
             setInteger(MediaFormat.KEY_PRIORITY, 0) // Real-time priority mode
             // ─────────────────────────────────────────────────────────────────────
+
+            // Prepend SPS/PPS headers before every sync frame (Android Q+)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                setInteger(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1)
+            }
         }
 
         encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)

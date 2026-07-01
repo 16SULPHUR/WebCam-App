@@ -25,6 +25,9 @@ _DEFAULTS: dict[str, Any] = {
     "targetFps":   30,     # 10 / 15 / 20 / 24 / 30
     "blur":        0,      # Background blur intensity (0 to 25)
     "cameraFacing": "back", # "back" or "front"
+    # Virtual background
+    "bgMode":      "none", # "none" | "blur" | "replace"
+    "bgImage":     "",     # filename within backgrounds/ folder
 }
 # ─────────────────────────────────────────────────────────────────────────────
 

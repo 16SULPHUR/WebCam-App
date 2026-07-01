@@ -16,6 +16,7 @@ import androidx.viewbinding.ViewBindings;
 import com.example.usbwebcambridge.R;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.checkbox.MaterialCheckBox;
 import java.lang.NullPointerException;
 import java.lang.Override;
 import java.lang.String;
@@ -28,6 +29,9 @@ public final class ActivityMainBinding implements ViewBinding {
   public final MaterialButton btnSwitchCamera;
 
   @NonNull
+  public final MaterialButton btnSwitchMode;
+
+  @NonNull
   public final Button btnToggle;
 
   @NonNull
@@ -38,6 +42,9 @@ public final class ActivityMainBinding implements ViewBinding {
 
   @NonNull
   public final MaterialCardView cardStreamerMode;
+
+  @NonNull
+  public final MaterialCheckBox cbRememberChoice;
 
   @NonNull
   public final LinearLayout modeSelectionOverlay;
@@ -55,17 +62,20 @@ public final class ActivityMainBinding implements ViewBinding {
   public final TextView tvStatus;
 
   private ActivityMainBinding(@NonNull CoordinatorLayout rootView,
-      @NonNull MaterialButton btnSwitchCamera, @NonNull Button btnToggle,
-      @NonNull TextureView cameraPreview, @NonNull MaterialCardView cardControllerMode,
-      @NonNull MaterialCardView cardStreamerMode, @NonNull LinearLayout modeSelectionOverlay,
+      @NonNull MaterialButton btnSwitchCamera, @NonNull MaterialButton btnSwitchMode,
+      @NonNull Button btnToggle, @NonNull TextureView cameraPreview,
+      @NonNull MaterialCardView cardControllerMode, @NonNull MaterialCardView cardStreamerMode,
+      @NonNull MaterialCheckBox cbRememberChoice, @NonNull LinearLayout modeSelectionOverlay,
       @NonNull MaterialCardView statusCard, @NonNull View statusPulse, @NonNull TextView tvRecBadge,
       @NonNull TextView tvStatus) {
     this.rootView = rootView;
     this.btnSwitchCamera = btnSwitchCamera;
+    this.btnSwitchMode = btnSwitchMode;
     this.btnToggle = btnToggle;
     this.cameraPreview = cameraPreview;
     this.cardControllerMode = cardControllerMode;
     this.cardStreamerMode = cardStreamerMode;
+    this.cbRememberChoice = cbRememberChoice;
     this.modeSelectionOverlay = modeSelectionOverlay;
     this.statusCard = statusCard;
     this.statusPulse = statusPulse;
@@ -106,6 +116,12 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
+      id = R.id.btnSwitchMode;
+      MaterialButton btnSwitchMode = ViewBindings.findChildViewById(rootView, id);
+      if (btnSwitchMode == null) {
+        break missingId;
+      }
+
       id = R.id.btnToggle;
       Button btnToggle = ViewBindings.findChildViewById(rootView, id);
       if (btnToggle == null) {
@@ -127,6 +143,12 @@ public final class ActivityMainBinding implements ViewBinding {
       id = R.id.cardStreamerMode;
       MaterialCardView cardStreamerMode = ViewBindings.findChildViewById(rootView, id);
       if (cardStreamerMode == null) {
+        break missingId;
+      }
+
+      id = R.id.cbRememberChoice;
+      MaterialCheckBox cbRememberChoice = ViewBindings.findChildViewById(rootView, id);
+      if (cbRememberChoice == null) {
         break missingId;
       }
 
@@ -160,9 +182,9 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
-      return new ActivityMainBinding((CoordinatorLayout) rootView, btnSwitchCamera, btnToggle,
-          cameraPreview, cardControllerMode, cardStreamerMode, modeSelectionOverlay, statusCard,
-          statusPulse, tvRecBadge, tvStatus);
+      return new ActivityMainBinding((CoordinatorLayout) rootView, btnSwitchCamera, btnSwitchMode,
+          btnToggle, cameraPreview, cardControllerMode, cardStreamerMode, cbRememberChoice,
+          modeSelectionOverlay, statusCard, statusPulse, tvRecBadge, tvStatus);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));
