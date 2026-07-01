@@ -12,6 +12,9 @@ import android.view.Surface
 import android.view.TextureView
 import android.util.Log
 import java.io.OutputStream
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import org.json.JSONObject
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.ByteBuffer
@@ -284,6 +287,27 @@ class CameraStreamer(
         }
     }
 
+    private fun handleRemoteCameraSwitch(facing: String) {
+        val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        for (id in manager.cameraIdList) {
+            try {
+                val chars = manager.getCameraCharacteristics(id)
+                val lensFacing = chars.get(CameraCharacteristics.LENS_FACING)
+                val targetFacing = if (facing.equals("front", ignoreCase = true)) {
+                    CameraCharacteristics.LENS_FACING_FRONT
+                } else {
+                    CameraCharacteristics.LENS_FACING_BACK
+                }
+                if (lensFacing == targetFacing) {
+                    switchCamera(id)
+                    break
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
     private fun openCamera() {
         val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
@@ -415,14 +439,26 @@ class CameraStreamer(
 
                 // Block here until the client disconnects by reading from its InputStream.
                 // Since the client never sends data, read() will block until EOF (-1) or exception.
+                // Block here until the client disconnects, reading lines for JSON commands
                 try {
                     val inputStream = client.getInputStream()
-                    val buffer = ByteArray(1024)
+                    val reader = BufferedReader(InputStreamReader(inputStream))
+                    var line: String?
                     while (running.get() && clientStream != null) {
-                        val bytesRead = inputStream.read(buffer)
-                        if (bytesRead == -1) {
-                            Log.i(TAG, "Client socket read returned EOF (-1)")
+                        line = reader.readLine()
+                        if (line == null) {
+                            Log.i(TAG, "Client socket read returned EOF (null)")
                             break
+                        }
+                        try {
+                            val json = JSONObject(line)
+                            val action = json.optString("action")
+                            if (action == "switch_camera") {
+                                val facing = json.optString("cameraFacing")
+                                handleRemoteCameraSwitch(facing)
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to parse command from client: ${e.message}")
                         }
                     }
                 } catch (e: Exception) {

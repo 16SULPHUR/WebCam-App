@@ -103,6 +103,7 @@ def main() -> None:
         on_disconnect = on_disconnect,
     )
     pipeline.set_on_stop(lambda: tcp_client.disconnect())
+    server.set_tcp_client(tcp_client)
 
     # ── 5. Shutdown handler ───────────────────────────────────────────────────
     def shutdown(sig=None, frame=None):

@@ -4,20 +4,28 @@
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\gradient_top_overlay.xml"
     },
     {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_background.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_background.xml"
+    },
+    {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-xxxhdpi_ic_launcher.png.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-xxxhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_btn_bg.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_btn_bg.xml"
     },
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-mdpi_ic_launcher.png.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-mdpi\\ic_launcher.png"
     },
     {
-        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-xxhdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-xxhdpi\\ic_launcher.png"
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\layout_widget_control.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\layout\\widget_control.xml"
     },
     {
-        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-hdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-hdpi\\ic_launcher.png"
+        "merged": "com.example.usbwebcambridge.app-merged_res-31:/layout_widget_control.xml.flat",
+        "source": "com.example.usbwebcambridge.app-main-33:/layout/widget_control.xml"
     },
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_gradient_bottom_overlay.xml.flat",
@@ -28,16 +36,20 @@
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\circle_core.xml"
     },
     {
-        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_ic_launcher_foreground.xml.flat",
-        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\ic_launcher_foreground.xml"
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\xml_widget_control_info.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\xml\\widget_control_info.xml"
     },
     {
-        "merged": "com.example.usbwebcambridge.app-merged_res-31:/layout_activity_main.xml.flat",
-        "source": "com.example.usbwebcambridge.app-main-33:/layout/activity_main.xml"
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_dot_inactive.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_dot_inactive.xml"
     },
     {
-        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\layout_activity_main.xml.flat",
-        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\layout\\activity_main.xml"
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\layout_activity_control.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\layout\\activity_control.xml"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_btn_rec_inactive_bg.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_btn_rec_inactive_bg.xml"
     },
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_circle_glow_pulse.xml.flat",
@@ -46,6 +58,46 @@
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-xhdpi_ic_launcher.png.flat",
         "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-xhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_dot_active.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_dot_active.xml"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_spinner_background.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\spinner_background.xml"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_btn_rec_bg.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_btn_rec_bg.xml"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-xxhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-hdpi_ic_launcher.png.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\mipmap-hdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_control_block_bg.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_control_block_bg.xml"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_ic_launcher_foreground.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\layout_activity_main.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\layout\\activity_main.xml"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_btn_reset_bg.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_btn_reset_bg.xml"
+    },
+    {
+        "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\drawable_widget_dot_ready.xml.flat",
+        "source": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-main-33:\\drawable\\widget_dot_ready.xml"
     },
     {
         "merged": "C:\\Users\\Manish\\.gradle\\daemon\\8.0\\com.example.usbwebcambridge.app-merged_res-31:\\mipmap-anydpi-v26_ic_launcher.xml.flat",

@@ -6,6 +6,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -33,6 +34,15 @@ public final class ActivityMainBinding implements ViewBinding {
   public final TextureView cameraPreview;
 
   @NonNull
+  public final MaterialCardView cardControllerMode;
+
+  @NonNull
+  public final MaterialCardView cardStreamerMode;
+
+  @NonNull
+  public final LinearLayout modeSelectionOverlay;
+
+  @NonNull
   public final MaterialCardView statusCard;
 
   @NonNull
@@ -46,12 +56,17 @@ public final class ActivityMainBinding implements ViewBinding {
 
   private ActivityMainBinding(@NonNull CoordinatorLayout rootView,
       @NonNull MaterialButton btnSwitchCamera, @NonNull Button btnToggle,
-      @NonNull TextureView cameraPreview, @NonNull MaterialCardView statusCard,
-      @NonNull View statusPulse, @NonNull TextView tvRecBadge, @NonNull TextView tvStatus) {
+      @NonNull TextureView cameraPreview, @NonNull MaterialCardView cardControllerMode,
+      @NonNull MaterialCardView cardStreamerMode, @NonNull LinearLayout modeSelectionOverlay,
+      @NonNull MaterialCardView statusCard, @NonNull View statusPulse, @NonNull TextView tvRecBadge,
+      @NonNull TextView tvStatus) {
     this.rootView = rootView;
     this.btnSwitchCamera = btnSwitchCamera;
     this.btnToggle = btnToggle;
     this.cameraPreview = cameraPreview;
+    this.cardControllerMode = cardControllerMode;
+    this.cardStreamerMode = cardStreamerMode;
+    this.modeSelectionOverlay = modeSelectionOverlay;
     this.statusCard = statusCard;
     this.statusPulse = statusPulse;
     this.tvRecBadge = tvRecBadge;
@@ -103,6 +118,24 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
+      id = R.id.cardControllerMode;
+      MaterialCardView cardControllerMode = ViewBindings.findChildViewById(rootView, id);
+      if (cardControllerMode == null) {
+        break missingId;
+      }
+
+      id = R.id.cardStreamerMode;
+      MaterialCardView cardStreamerMode = ViewBindings.findChildViewById(rootView, id);
+      if (cardStreamerMode == null) {
+        break missingId;
+      }
+
+      id = R.id.modeSelectionOverlay;
+      LinearLayout modeSelectionOverlay = ViewBindings.findChildViewById(rootView, id);
+      if (modeSelectionOverlay == null) {
+        break missingId;
+      }
+
       id = R.id.statusCard;
       MaterialCardView statusCard = ViewBindings.findChildViewById(rootView, id);
       if (statusCard == null) {
@@ -128,7 +161,8 @@ public final class ActivityMainBinding implements ViewBinding {
       }
 
       return new ActivityMainBinding((CoordinatorLayout) rootView, btnSwitchCamera, btnToggle,
-          cameraPreview, statusCard, statusPulse, tvRecBadge, tvStatus);
+          cameraPreview, cardControllerMode, cardStreamerMode, modeSelectionOverlay, statusCard,
+          statusPulse, tvRecBadge, tvStatus);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

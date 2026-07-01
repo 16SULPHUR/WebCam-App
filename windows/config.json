@@ -9,5 +9,6 @@
   "saturation": 1,
   "sharpness": 0,
   "targetFps": 30,
-  "blur": 0
+  "blur": 0,
+  "cameraFacing": "back"
 }

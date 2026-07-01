@@ -282,4 +282,112 @@
         android:layout_height="wrap_content"
         android:visibility="gone"/>
 
+    <!-- ═══ MODE SELECTION OVERLAY ═══ -->
+    <LinearLayout
+        android:id="@+id/modeSelectionOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#0b0f19"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="WebCam Bridge"
+            android:textColor="#ffffff"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Select this device's role"
+            android:textColor="#9ca3af"
+            android:textSize="14sp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- Streamer Mode Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardStreamerMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="#CC121826"
+            app:strokeColor="#1f2937"
+            app:strokeWidth="1dp"
+            android:layout_marginBottom="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📹 Camera Streamer"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#06b6d4"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Stream this phone's camera to your Windows PC over USB ADB."
+                    android:textColor="#9ca3af"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Controller Mode Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardControllerMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="#CC121826"
+            app:strokeColor="#1f2937"
+            app:strokeWidth="1dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎛️ Remote Controller"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#10b981"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Control camera filters, zoom, focus, and recording from this phone."
+                    android:textColor="#9ca3af"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

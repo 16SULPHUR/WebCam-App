@@ -45,6 +45,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
     config:      ConfigManager      = None   # type: ignore[assignment]
     broadcaster: EventBroadcaster   = None   # type: ignore[assignment]
     _pipeline_ref = None                     # set by BridgeServer
+    _tcp_client_ref = None                   # set by BridgeServer
     recorder:    RecordingManager   = None   # type: ignore[assignment]
     public_dir:  str                = ""
 
@@ -57,6 +58,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        print(f"[Web] GET {path}", flush=True)
         try:
             if path in ("/", "/index.html"):
                 self._serve_file("index.html")
@@ -80,11 +82,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        print(f"[Web] POST {path}", flush=True)
         try:
             if path == "/api/config":
                 self._handle_config_update()
             elif path == "/api/reconnect":
-                self._json({"success": True})
+                self._json({
+                    "success": True,
+                    **self.broadcaster.get_stats(),
+                    "config": self.config.to_dict(),
+                })
                 threading.Thread(
                     target=self._pipeline_ref.restart,
                     args=("Manual reconnect requested",),
@@ -94,6 +101,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._handle_record_start()
             elif path == "/api/record/stop":
                 self._handle_record_stop()
+            elif path == "/api/record/toggle":
+                self._handle_record_toggle()
             else:
                 self.send_error(404)
         except Exception as exc:
@@ -196,6 +205,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
         try:
             data = json.loads(body)
             
+            # Handle relative deltas if present
+            if "zoom_delta" in data:
+                current_zoom = self.config.get("zoom", 1.0)
+                data["zoom"] = max(1.0, min(3.0, current_zoom + data["zoom_delta"]))
+                del data["zoom_delta"]
+                
+            if "brightness_delta" in data:
+                current_brightness = self.config.get("brightness", 0.0)
+                data["brightness"] = max(-1.0, min(1.0, current_brightness + data["brightness_delta"]))
+                del data["brightness_delta"]
+
             old_res = self.config.get("resolution")
             old_fps = self.config.get("targetFps")
             
@@ -205,7 +225,21 @@ class BridgeHandler(BaseHTTPRequestHandler):
             needs_restart = (old_res != new_res) or (old_fps != new_fps)
             
             self.config.update(data)
-            self._json({"success": True, "restarted": needs_restart})
+            
+            # Forward camera switch commands to the streamer device via TCP command channel
+            camera_facing = data.get("cameraFacing")
+            if camera_facing and self._tcp_client_ref:
+                self._tcp_client_ref.send_command(json.dumps({
+                    "action": "switch_camera",
+                    "cameraFacing": camera_facing
+                }))
+
+            self._json({
+                "success": True,
+                "restarted": needs_restart,
+                **self.broadcaster.get_stats(),
+                "config": self.config.to_dict(),
+            })
             
             if needs_restart:
                 self.broadcaster.broadcast_log(
@@ -234,7 +268,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         try:
             path = self.recorder.start()
-            self._json({"success": True, "file": path})
+            self._json({
+                "success": True,
+                "file": path,
+                **self.broadcaster.get_stats(),
+                "config": self.config.to_dict(),
+            })
             self.broadcaster.broadcast_log("system", f"✓ Recording started → {path}")
         except Exception as exc:
             self._json({"error": str(exc)}, 500)
@@ -245,10 +284,21 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         try:
             path = self.recorder.stop()
-            self._json({"success": True, "file": path})
+            self._json({
+                "success": True,
+                "file": path,
+                **self.broadcaster.get_stats(),
+                "config": self.config.to_dict(),
+            })
             self.broadcaster.broadcast_log("system", f"✓ Recording stopped → {path}")
         except Exception as exc:
             self._json({"error": str(exc)}, 500)
+
+    def _handle_record_toggle(self) -> None:
+        if self.recorder.is_recording:
+            self._handle_record_stop()
+        else:
+            self._handle_record_start()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -302,6 +352,10 @@ class BridgeServer:
     def set_pipeline(self, pipeline) -> None:
         """Wire up the Pipeline reference (avoids circular imports)."""
         BridgeHandler._pipeline_ref = pipeline
+
+    def set_tcp_client(self, tcp_client) -> None:
+        """Wire up the TCP client reference."""
+        BridgeHandler._tcp_client_ref = tcp_client
 
     def start(self) -> None:
         """Start the HTTP server (blocking — call from a daemon thread)."""

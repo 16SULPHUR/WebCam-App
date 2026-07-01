@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var streamer: CameraStreamer
 
     private var isStreaming = false
+    private var isStreamerModeSelected = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +57,24 @@ class MainActivity : AppCompatActivity() {
             showCameraSelectionDialog()
         }
 
+        val overlay = findViewById<View>(R.id.modeSelectionOverlay)
+        val cardStreamer = findViewById<View>(R.id.cardStreamerMode)
+        val cardController = findViewById<View>(R.id.cardControllerMode)
+
+        cardStreamer.setOnClickListener {
+            isStreamerModeSelected = true
+            overlay.visibility = View.GONE
+            if (cameraPreview.isAvailable) {
+                streamer.setPreviewTextureView(cameraPreview)
+                startStreaming()
+            }
+        }
+
+        cardController.setOnClickListener {
+            val intent = android.content.Intent(this, ControlActivity::class.java)
+            startActivity(intent)
+        }
+
         streamer = CameraStreamer(this) { status ->
             runOnUiThread {
                 tvStatus.text = status
@@ -70,7 +89,7 @@ class MainActivity : AppCompatActivity() {
         cameraPreview.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, w: Int, h: Int) {
                 // Surface is ready — attempt to start streaming
-                if (!isStreaming) {
+                if (isStreamerModeSelected && !isStreaming) {
                     streamer.setPreviewTextureView(cameraPreview)
                     startStreaming()
                 }
@@ -83,8 +102,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // If the TextureView is already available and we're not streaming, start now
-        if (!isStreaming && cameraPreview.isAvailable) {
+        val overlay = findViewById<View>(R.id.modeSelectionOverlay)
+        if (!isStreamerModeSelected) {
+            overlay.visibility = View.VISIBLE
+        }
+        // If the TextureView is already available and we're streaming, start now
+        if (isStreamerModeSelected && !isStreaming && cameraPreview.isAvailable) {
             streamer.setPreviewTextureView(cameraPreview)
             startStreaming()
         }

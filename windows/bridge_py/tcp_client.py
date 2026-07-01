@@ -82,6 +82,17 @@ class AndroidTcpClient:
         """Force close the current connection, triggering a reconnect."""
         self._close_socket()
 
+    def send_command(self, payload: str) -> None:
+        """Send a string payload (e.g., newline-terminated JSON command) to the connected Android client."""
+        sock = self._sock
+        if sock:
+            try:
+                # Add newline separator for easy reading on Android (readLine)
+                data = (payload + "\n").encode("utf-8")
+                sock.sendall(data)
+            except Exception as exc:
+                self._bc.broadcast_log("node", f"[Bridge] Failed to send command to Android: {exc}")
+
     # ── Internal ─────────────────────────────────────────────────────────────
 
     def _run(self) -> None:

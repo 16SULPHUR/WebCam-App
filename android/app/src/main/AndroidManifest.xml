@@ -23,7 +23,8 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.USBWebcamBridge">
+        android:theme="@style/Theme.USBWebcamBridge"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
@@ -34,6 +35,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ControlActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.USBWebcamBridge.NoActionBar" />
+
+        <receiver
+            android:name=".ControlWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.usbwebcambridge.ACTION_WIDGET_CONTROL" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_control_info" />
+        </receiver>
 
     </application>
 
