@@ -68,16 +68,41 @@ oneko_size = 2.0
 custom_oneko_enabled = False
 custom_oneko_skin = "socks"
 custom_pets_config = []
+segmentation_engine = "mediapipe"
+matting_segmenter = None
+bgr_ref_img_raw = None
+bgr_ref_img = None
+_logged_ref_warning = False
+rvm_segmenter = None
+rvm_downsample_ratio = 0.25
+face_touchup_processor = None
+face_touchup_enabled = False
+face_touchup_strength = 0.35
 
 _prev_settings = {}
 
 def log(msg):
     print(msg, file=sys.stderr, flush=True)
 
+def load_bgr_ref():
+    global bgr_ref_img_raw, bgr_ref_img
+    ref_path = os.path.join(os.path.dirname(config_path), "background_ref.png")
+    if os.path.isfile(ref_path):
+        img = cv2.imread(ref_path)
+        if img is not None:
+            bgr_ref_img_raw = img
+            bgr_ref_img = img.copy()
+            log(f"[PySender] Loaded background reference: {ref_path}")
+            return True
+    bgr_ref_img_raw = None
+    bgr_ref_img = None
+    return False
+
 def load_config(initial=False):
     global WIDTH, HEIGHT, mirror, orientation, zoom, brightness, contrast
     global saturation, sharpness, blur, vcam_enabled, bg_mode, bg_image, oneko_enabled, oneko_size
-    global custom_oneko_enabled, custom_oneko_skin, custom_pets_config, _prev_settings
+    global custom_oneko_enabled, custom_oneko_skin, custom_pets_config, segmentation_engine, _prev_settings
+    global rvm_downsample_ratio, face_touchup_enabled, face_touchup_strength, rvm_segmenter
     try:
         with open(config_path, "r", encoding="utf-8") as fh:
             cfg = json.load(fh)
@@ -106,6 +131,14 @@ def load_config(initial=False):
         oneko_size  = float(cfg.get("onekoSize", 2.0))
         custom_oneko_enabled = cfg.get("customOnekoEnabled", False)
         custom_oneko_skin  = cfg.get("customOnekoSkin", "socks")
+        prev_engine = segmentation_engine
+        segmentation_engine = cfg.get("segmentationEngine", "mediapipe")
+        rvm_downsample_ratio = float(cfg.get("rvmDownsampleRatio", 0.25))
+        face_touchup_enabled = cfg.get("faceTouchupEnabled", False)
+        face_touchup_strength = float(cfg.get("faceTouchupStrength", 35)) / 100.0
+        # Reset RVM recurrent states when engine switches to/from RVM
+        if rvm_segmenter is not None and prev_engine != segmentation_engine:
+            rvm_segmenter.reset_states()
         
         custom_pets_config = cfg.get("customPets", [])
         if not isinstance(custom_pets_config, list):
@@ -123,6 +156,10 @@ def load_config(initial=False):
             "oneko_enabled": oneko_enabled,
             "oneko_size": oneko_size,
             "custom_pets": json.dumps(custom_pets_config),
+            "segmentation_engine": segmentation_engine,
+            "rvm_downsample_ratio": rvm_downsample_ratio,
+            "face_touchup_enabled": face_touchup_enabled,
+            "face_touchup_strength": face_touchup_strength,
         }
 
         if not initial and current_state != _prev_settings:
@@ -150,7 +187,8 @@ segmenter_thread = None
 
 # Shared state for segmentation thread
 seg_input_lock = threading.Lock()
-seg_input_frame = None      # latest frame_rgb resized to MP_W, MP_H
+seg_input_frame = None        # latest frame_rgb resized to MP_W, MP_H (MediaPipe/BgMattingV2)
+seg_input_full_frame = None   # latest full-res frame_rgb (RVM)
 seg_input_w = 0
 seg_input_h = 0
 
@@ -165,64 +203,126 @@ _ema_mask = None   # float32, same shape as processed frame
 _EMA_ALPHA = 0.65  # weight for the new frame's mask (higher = faster tracking, less smoothing)
 
 def segmenter_thread_func():
-    global segmenter, seg_output_mask, _ema_mask
+    global segmenter, matting_segmenter, rvm_segmenter
+    global seg_output_mask, _ema_mask, bgr_ref_img, _logged_ref_warning
     log("[PySender] Segmenter thread active.")
     while running:
-        if segmenter is None:
+        # ── Engine readiness checks ──────────────────────────────────────
+        if segmentation_engine == "mediapipe":
+            if segmenter is None:
+                time.sleep(0.05)
+                continue
+
+        elif segmentation_engine == "background_matting":
+            if matting_segmenter is None:
+                try:
+                    from bridge_py.bg_matting import BackgroundMattingSegmenter
+                    matting_segmenter = BackgroundMattingSegmenter()
+                except Exception as e:
+                    sys.stderr.write(f"[PySender] ERROR loading bg_matting: {e}\n")
+                    time.sleep(1.0)
+                    continue
+            if bgr_ref_img is None:
+                if not load_bgr_ref():
+                    if not _logged_ref_warning:
+                        log("[PySender] WARNING: BgMattingV2 selected but background_ref.png is missing. "
+                            "Click 'Capture Background Ref' in the control panel.")
+                        _logged_ref_warning = True
+                    time.sleep(0.1)
+                    continue
+            _logged_ref_warning = False
+
+        elif segmentation_engine == "rvm":
+            if rvm_segmenter is None:
+                try:
+                    from bridge_py.rvm_matting import RVMSegmenter
+                    rvm_segmenter = RVMSegmenter(downsample_ratio=rvm_downsample_ratio)
+                except Exception as e:
+                    sys.stderr.write(f"[PySender] ERROR loading RVM: {e}\n")
+                    time.sleep(1.0)
+                    continue
+            if rvm_segmenter.model is None:
+                time.sleep(0.1)
+                continue
+        else:
             time.sleep(0.05)
             continue
 
+        # ── Read the correct input queue ─────────────────────────────────
         frame_to_process = None
         target_w, target_h = 0, 0
         with seg_input_lock:
-            if seg_input_frame is not None:
-                frame_to_process = seg_input_frame.copy()
-                target_w = seg_input_w
-                target_h = seg_input_h
-                # Clear the input slot so we don't process the same frame twice
-                globals()['seg_input_frame'] = None
+            if segmentation_engine == "rvm":
+                if seg_input_full_frame is not None:
+                    frame_to_process = seg_input_full_frame.copy()
+                    target_w = seg_input_w
+                    target_h = seg_input_h
+                    globals()['seg_input_full_frame'] = None
+            else:
+                if seg_input_frame is not None:
+                    frame_to_process = seg_input_frame.copy()
+                    target_w = seg_input_w
+                    target_h = seg_input_h
+                    globals()['seg_input_frame'] = None
 
         if frame_to_process is None:
             time.sleep(0.005)
             continue
 
+        # ── Run inference ────────────────────────────────────────────────
         try:
-            results = segmenter.process(frame_to_process)
-            if results.segmentation_mask is not None:
-                mask_small = results.segmentation_mask
+            mask_full = None
+            if segmentation_engine == "mediapipe":
+                results = segmenter.process(frame_to_process)
+                if results.segmentation_mask is not None:
+                    mask_small = results.segmentation_mask
+                    mask_full = cv2.resize(mask_small, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+                    # mediapipe returns [H, W] — already 2D
 
-                # Resize back to target resolution (saves main thread from doing this resize!)
-                mask_full = cv2.resize(mask_small, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+            elif segmentation_engine == "background_matting":
+                frame_bgr_proc = cv2.cvtColor(frame_to_process, cv2.COLOR_RGB2BGR)
+                mask_full = matting_segmenter.process_frame(frame_bgr_proc, bgr_ref_img)
+                # bg_matting returns [H, W, 1] — squeeze to 2D
+                if mask_full is not None and mask_full.ndim == 3:
+                    mask_full = mask_full[:, :, 0]
 
-                # EMA temporal smoothing - eliminates flicker and edge jitter
-                if _ema_mask is None or _ema_mask.shape[:2] != (target_h, target_w):
-                    _ema_mask = mask_full.astype(np.float32)
+            elif segmentation_engine == "rvm":
+                mask_full = rvm_segmenter.process_frame(frame_to_process, rvm_downsample_ratio)
+                # rvm returns [H, W, 1] — squeeze to 2D
+                if mask_full is not None and mask_full.ndim == 3:
+                    mask_full = mask_full[:, :, 0]
+
+            if mask_full is not None:
+                # RVM is temporally stable via recurrent states — skip EMA.
+                # MediaPipe and BgMattingV2 are single-frame models — apply EMA.
+                if segmentation_engine == "rvm":
+                    final_mask = mask_full.astype(np.float32)
                 else:
-                    _ema_mask = _EMA_ALPHA * mask_full.astype(np.float32) + (1.0 - _EMA_ALPHA) * _ema_mask
+                    if _ema_mask is None or _ema_mask.shape[:2] != (target_h, target_w):
+                        _ema_mask = mask_full.astype(np.float32)
+                    else:
+                        _ema_mask = (_EMA_ALPHA * mask_full.astype(np.float32)
+                                     + (1.0 - _EMA_ALPHA) * _ema_mask)
+                    final_mask = _ema_mask
 
-                mask_3d = np.stack((_ema_mask,) * 3, axis=-1)
-
+                # Stack to [H, W, 3] for compositing
+                mask_3d = np.stack((final_mask,) * 3, axis=-1)
                 with seg_output_lock:
                     seg_output_mask = mask_3d
+
         except Exception as e:
             sys.stderr.write(f"[PySender] Segmenter thread exception: {e}\n")
             time.sleep(0.02)
 
 
 def load_mediapipe_worker():
-    global segmenter, segmenter_loading, segmenter_thread
+    global segmenter, segmenter_loading
     log("[PySender] Loading MediaPipe Selfie Segmentation (landscape model)...")
     try:
         import mediapipe as mp
         mp_selfie = mp.solutions.selfie_segmentation
-        # model_selection=1 = landscape model (256x144 tensor, fastest for webcam)
         segmenter = mp_selfie.SelfieSegmentation(model_selection=1)
         log("[PySender] MediaPipe Selfie Segmentation loaded successfully.")
-
-        # Start the background segmenter thread
-        segmenter_thread = threading.Thread(target=segmenter_thread_func, name="MpSegmenter", daemon=True)
-        segmenter_thread.start()
-        log("[PySender] Background segmenter thread started.")
     except Exception as exc:
         log(f"[PySender] ERROR loading MediaPipe: {exc}")
     finally:
@@ -549,11 +649,18 @@ def main():
                     skin_name = pet_cfg.get("skin", "socks")
                     custom_animators[idx].preload_custom_skin(skin_name)
 
-            # Lazy-load MediaPipe when any background effect is needed
+            # Lazy-load segmenters when any background effect is needed
             needs_segmentation = bg_mode in ("blur", "replace")
-            if needs_segmentation and segmenter is None and not segmenter_loading:
-                segmenter_loading = True
-                threading.Thread(target=load_mediapipe_worker, name="MpLoader", daemon=True).start()
+            if needs_segmentation:
+                global segmenter_thread
+                if segmenter_thread is None:
+                    segmenter_thread = threading.Thread(target=segmenter_thread_func, name="SegmenterThread", daemon=True)
+                    segmenter_thread.start()
+                    log("[PySender] Background segmenter thread started.")
+                
+                if segmentation_engine == "mediapipe" and segmenter is None and not segmenter_loading:
+                    segmenter_loading = True
+                    threading.Thread(target=load_mediapipe_worker, name="MpLoader", daemon=True).start()
 
             # Read raw BGR24 frame from stdin
             raw = b''
@@ -567,6 +674,19 @@ def main():
 
             try:
                 frame_bgr = np.frombuffer(raw, dtype=np.uint8).reshape((HEIGHT, WIDTH, 3))
+
+                # Check if background reference capture was requested (raw untransformed frame)
+                flag_path = os.path.join(os.path.dirname(config_path), ".capture_bg_ref_flag")
+                if os.path.isfile(flag_path):
+                    try:
+                        ref_path = os.path.join(os.path.dirname(config_path), "background_ref.png")
+                        cv2.imwrite(ref_path, frame_bgr)
+                        log(f"[PySender] Captured and saved new RAW background reference to {ref_path}")
+                        if os.path.isfile(flag_path):
+                            os.remove(flag_path)
+                        load_bgr_ref()
+                    except Exception as e:
+                        log(f"[PySender] ERROR capturing background reference: {e}")
 
                 # 1. Crop-zoom
                 if zoom > 1.0:
@@ -593,6 +713,33 @@ def main():
 
                 h_rot, w_rot = frame_bgr.shape[:2]
 
+                # Update the background reference image transforms to match
+                if bgr_ref_img_raw is not None:
+                    # 1. Crop-zoom
+                    if zoom > 1.0:
+                        cx, cy = WIDTH // 2, HEIGHT // 2
+                        cw, ch = int(WIDTH / zoom), int(HEIGHT / zoom)
+                        x1 = max(0, cx - cw // 2)
+                        y1 = max(0, cy - ch // 2)
+                        x2 = min(WIDTH, x1 + cw)
+                        y2 = min(HEIGHT, y1 + ch)
+                        cropped_ref = bgr_ref_img_raw[y1:y2, x1:x2]
+                        bgr_ref_img = cv2.resize(cropped_ref, (w_rot, h_rot), interpolation=cv2.INTER_LINEAR)
+                    else:
+                        bgr_ref_img = cv2.resize(bgr_ref_img_raw, (w_rot, h_rot), interpolation=cv2.INTER_LINEAR)
+
+                    # 2. Mirror
+                    if mirror:
+                        bgr_ref_img = cv2.flip(bgr_ref_img, 1)
+
+                    # 3. Rotation
+                    if orientation == 90:
+                        bgr_ref_img = cv2.rotate(bgr_ref_img, cv2.ROTATE_90_CLOCKWISE)
+                    elif orientation == 180:
+                        bgr_ref_img = cv2.rotate(bgr_ref_img, cv2.ROTATE_180)
+                    elif orientation == 270:
+                        bgr_ref_img = cv2.rotate(bgr_ref_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
                 # 4. Brightness / Contrast
                 if abs(brightness) > 0.01 or abs(contrast - 1.0) > 0.01:
                     frame_bgr = apply_color_eq(frame_bgr, brightness, contrast)
@@ -611,14 +758,24 @@ def main():
                 # Convert BGR to RGB for downstream processing
                 frame_rgb = frame_bgr[:, :, ::-1].copy()
 
+
+
                 # 7. Virtual Background (Blur / Replace)
                 if bg_mode in ("blur", "replace"):
-                    # Feed the current frame (resized to 256x144) to the background worker
-                    seg_in = cv2.resize(frame_rgb, (MP_W, MP_H), interpolation=cv2.INTER_LINEAR)
-                    with seg_input_lock:
-                        seg_input_frame = seg_in
-                        seg_input_w = w_rot
-                        seg_input_h = h_rot
+                    # Feed the correct input queue based on the active engine
+                    if segmentation_engine == "rvm":
+                        # RVM operates on full-res RGB — no pre-downscale
+                        with seg_input_lock:
+                            globals()['seg_input_full_frame'] = frame_rgb
+                            globals()['seg_input_w'] = w_rot
+                            globals()['seg_input_h'] = h_rot
+                    else:
+                        # MediaPipe / BgMattingV2: downscale to 256×144 first
+                        seg_in = cv2.resize(frame_rgb, (MP_W, MP_H), interpolation=cv2.INTER_LINEAR)
+                        with seg_input_lock:
+                            globals()['seg_input_frame'] = seg_in
+                            globals()['seg_input_w'] = w_rot
+                            globals()['seg_input_h'] = h_rot
 
                     # Read the latest computed mask from the background thread
                     with seg_output_lock:
@@ -635,6 +792,17 @@ def main():
                             bg_rgb = get_background_rgb(bg_image, w_rot, h_rot)
                             if bg_rgb is not None:
                                 frame_rgb = (frame_rgb * mask_3d + bg_rgb * (1.0 - mask_3d)).astype(np.uint8)
+
+                # 7.7 Face Touch-up (bilateral skin smoothing)
+                if face_touchup_enabled and face_touchup_strength > 0.01:
+                    if face_touchup_processor is None:
+                        try:
+                            from bridge_py.face_touchup import FaceTouchup
+                            globals()['face_touchup_processor'] = FaceTouchup()
+                        except Exception as _e:
+                            log(f"[PySender] ERROR loading FaceTouchup: {_e}")
+                    if face_touchup_processor is not None:
+                        frame_rgb = face_touchup_processor.process_frame(frame_rgb, face_touchup_strength)
 
                 # 7.5 Draw Oneko Pet Overlay
                 if oneko_enabled and oneko_animator is not None:

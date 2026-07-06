@@ -71,7 +71,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             elif path == "/api/config":
                 self._json(self.config.to_dict())
             elif path == "/api/status":
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                ref_path = os.path.join(base_dir, "windows", "background_ref.png")
                 self._json({
+                    "hasBgRef": os.path.isfile(ref_path),
                     **self.broadcaster.get_stats(),
                     "config": self.config.to_dict(),
                 })
@@ -117,6 +120,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._handle_record_toggle()
             elif path == "/api/record/snapshot":
                 self._handle_record_snapshot()
+            elif path == "/api/capture_bg_ref":
+                self._handle_capture_bg_ref()
+            elif path == "/api/upload_background":
+                self._handle_upload_background()
             else:
                 self.send_error(404)
         except Exception as exc:
@@ -335,6 +342,41 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self.broadcaster.broadcast_log("system", f"Snapshot saved -> {path}")
         except Exception as exc:
             self._json({"error": str(exc)}, 500)
+
+    def _handle_capture_bg_ref(self) -> None:
+        """Create a flag file to signal frame_sender.py to capture the next frame as background_ref.png."""
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        flag_path = os.path.join(base_dir, "windows", ".capture_bg_ref_flag")
+        try:
+            with open(flag_path, "w") as f:
+                f.write("1")
+            self._json({"success": True, "message": "Reference capture flagged."})
+            self.broadcaster.broadcast_log("system", "Flagged background reference capture.")
+        except Exception as e:
+            self._json({"success": False, "error": str(e)}, 500)
+
+    def _handle_upload_background(self) -> None:
+        """Accept raw file upload and save it as a background image."""
+        from urllib.parse import parse_qs
+        query = urlparse(self.path).query
+        params = parse_qs(query)
+        filename = params.get("filename", [""])[0]
+        if not filename:
+            self._json({"success": False, "error": "Missing filename parameter"}, 400)
+            return
+        filename = os.path.basename(filename)
+        length = int(self.headers.get("Content-Length", 0))
+        data = self.rfile.read(length)
+        
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        bg_path = os.path.join(base_dir, "windows", "backgrounds", filename)
+        try:
+            with open(bg_path, "wb") as f:
+                f.write(data)
+            self._json({"success": True, "filename": filename})
+            self.broadcaster.broadcast_log("system", f"Uploaded custom background: {filename}")
+        except Exception as e:
+            self._json({"success": False, "error": str(e)}, 500)
 
     # ── Backgrounds ───────────────────────────────────────────────────────────
 

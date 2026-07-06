@@ -69,6 +69,32 @@ const Config = (() => {
       const bgImg  = cfg.bgImage || '';
       _applyBgModeToUI(bgMode, bgImg);
 
+      const segSelect = el('controller-seg-engine-select');
+      if (segSelect) {
+        segSelect.value = cfg.segmentationEngine || 'mediapipe';
+        onSegEngineChange(cfg.segmentationEngine || 'mediapipe');
+      }
+
+      // RVM quality slider
+      const rvmRatio = cfg.rvmDownsampleRatio ?? 0.25;
+      const rvmRangeEl = el('rvm-downsample-range');
+      if (rvmRangeEl) rvmRangeEl.value = Math.round(rvmRatio * 100);
+      const rvmValEl = el('rvm-downsample-val');
+      if (rvmValEl) rvmValEl.textContent = rvmRatio.toFixed(2) + '×';
+
+      // Face touch-up
+      const ftEnabled = cfg.faceTouchupEnabled ?? false;
+      const ftCheckbox = el('controller-face-touchup-checkbox');
+      if (ftCheckbox) ftCheckbox.checked = ftEnabled;
+      const ftStrength = cfg.faceTouchupStrength ?? 35;
+      const ftRange = el('face-touchup-strength-range');
+      if (ftRange) ftRange.value = ftStrength;
+      const ftVal = el('face-touchup-strength-val');
+      if (ftVal) ftVal.textContent = ftStrength + '%';
+      _applyFaceTouchupUI(ftEnabled);
+      const ledFt = el('led-face-touchup');
+      if (ledFt) ledFt.classList.toggle('active', ftEnabled);
+
       const zoom = cfg.zoom ?? 1.0;
       if (el('zoom-select')) el('zoom-select').value = zoom;
       if (el('zoom-val'))    el('zoom-val').textContent = parseFloat(zoom).toFixed(1) + 'x';
@@ -474,6 +500,10 @@ const Config = (() => {
       customPets:  _customPets,
       customOnekoEnabled: _customPets[0] ? _customPets[0].enabled : false,
       customOnekoSkin: _customPets[0] ? _customPets[0].skin : 'socks',
+      segmentationEngine: el('controller-seg-engine-select')?.value || 'mediapipe',
+      rvmDownsampleRatio:  parseFloat((parseInt(el('rvm-downsample-range')?.value || 25, 10) / 100).toFixed(2)),
+      faceTouchupEnabled:  el('controller-face-touchup-checkbox')?.checked || false,
+      faceTouchupStrength: parseInt(el('face-touchup-strength-range')?.value || 35, 10),
     };
 
     console.log(
@@ -808,23 +838,83 @@ const Config = (() => {
     closeSkinModal();
   }
 
-  return { 
-    load, 
-    update, 
-    onOrientationChange, 
-    onZoomChange, 
-    onProcessingChange, 
-    resetProcessing, 
-    resetSingle, 
-    updateFromController, 
-    onOrientationChangeFromController, 
-    setBgMode, 
-    loadBackgrounds, 
+  async function updateBgRefIndicator() {
+    try {
+      const res = await fetch('/api/status');
+      if (!res.ok) return;
+      const data = await res.json();
+      const hasRef = !!data.hasBgRef;
+      
+      const led = el('led-bg-ref-status');
+      const txt = el('bg-ref-status-text');
+      if (led && txt) {
+        if (hasRef) {
+          led.style.backgroundColor = '#10b981';
+          led.style.boxShadow = '0 0 6px #10b981';
+          txt.textContent = 'Ready';
+          txt.style.color = '#10b981';
+        } else {
+          led.style.backgroundColor = '#ef4444';
+          led.style.boxShadow = '0 0 6px #ef4444';
+          txt.textContent = 'Missing';
+          txt.style.color = '#ef4444';
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function onSegEngineChange(val) {
+    const select = el('controller-seg-engine-select');
+    if (select) select.value = val;
+
+    const mattingCtrls = el('bg-matting-controls');
+    if (mattingCtrls) {
+      mattingCtrls.style.display = (val === 'background_matting') ? 'flex' : 'none';
+    }
+
+    const rvmCtrls = el('rvm-controls');
+    if (rvmCtrls) {
+      rvmCtrls.style.display = (val === 'rvm') ? 'flex' : 'none';
+    }
+
+    if (val === 'background_matting') {
+      updateBgRefIndicator();
+    }
+
+    if (!_loading) {
+    }
+  }
+
+  return {
+    load,
+    update,
+    updateFromController,
+    resetProcessing,
+    resetSingle,
+    onProcessingChange,
+    onOrientationChange,
+    onOrientationChangeFromController,
+    onBgModeChange,
+    setBgMode,
+    onSegEngineChange,
+    onRvmQualityChange,
+    onFaceTouchupChange,
+    captureBackgroundRef,
+    uploadBackground,
+    loadBackgrounds,
+    onOnekoChange,
     onOnekoSizeChange,
+    onCustomOnekoChange,
+    onCustomOnekoSkinChange,
+    updateBgRefIndicator,
     addCustomPet,
-    closeSkinModal,
-    filterSkins,
-    setSkinFilter
+    removeCustomPet,
+    setCustomPetSkin,
+    toggleCustomPetEnabled,
+    setCustomPetTarget,
+    setSkinFilter,
+    toggleFavoriteSkin,
   };
 })();
-

@@ -10,29 +10,33 @@
   "sharpness": 0,
   "targetFps": 30,
   "blur": 25,
-  "cameraFacing": "front",
-  "bgMode": "none",
-  "bgImage": "city.png",
-  "onekoEnabled": true,
+  "cameraFacing": "back",
+  "bgMode": "replace",
+  "bgImage": "api_test_green.png",
+  "onekoEnabled": false,
   "onekoSize": 4,
-  "customOnekoEnabled": true,
-  "customOnekoSkin": "zelda3",
+  "customOnekoEnabled": false,
+  "customOnekoSkin": "spooky",
   "customPets": [
     {
-      "skin": "zelda3",
-      "enabled": true
+      "skin": "spooky",
+      "enabled": false
     },
     {
       "skin": "dave",
-      "enabled": true
+      "enabled": false
     },
     {
       "skin": "jess",
-      "enabled": true
+      "enabled": false
     },
     {
       "skin": "sonic",
-      "enabled": true
+      "enabled": false
     }
-  ]
-}
+  ],
+  "segmentationEngine": "background_matting",
+  "rvmDownsampleRatio": 0.25,
+  "faceTouchupEnabled": false,
+  "faceTouchupStrength": 35
+}
