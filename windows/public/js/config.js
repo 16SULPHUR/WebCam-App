@@ -40,6 +40,10 @@ const Config = (() => {
       if (el('orientation-select')) el('orientation-select').value = String(cfg.orientation ?? 0);
       if (el('vcam-checkbox'))     el('vcam-checkbox').checked    = cfg.vcamEnabled !== false;
       if (el('camera-facing-select')) el('camera-facing-select').value = cfg.cameraFacing || 'back';
+      if (el('controller-oneko-checkbox')) el('controller-oneko-checkbox').checked = cfg.onekoEnabled !== false;
+      const ledOneko = el('led-oneko');
+      if (ledOneko) ledOneko.classList.toggle('active', cfg.onekoEnabled !== false);
+      if (el('controller-oneko-size-select')) el('controller-oneko-size-select').value = String(cfg.onekoSize ?? 2.0);
 
       // Virtual background
       const bgMode = cfg.bgMode || 'none';
@@ -442,6 +446,8 @@ const Config = (() => {
       cameraFacing: el('controller-camera-facing-select')?.value || el('camera-facing-select')?.value || 'back',
       bgMode:      _bgMode,
       bgImage:     _bgImage,
+      onekoEnabled: (el('controller-oneko-checkbox') ? el('controller-oneko-checkbox').checked : true),
+      onekoSize:   parseFloat(el('controller-oneko-size-select')?.value || 2.0),
     };
 
     console.log(

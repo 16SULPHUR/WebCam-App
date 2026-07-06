@@ -10,7 +10,9 @@
   "sharpness": 0,
   "targetFps": 30,
   "blur": 25,
-  "cameraFacing": "back",
-  "bgMode": "replace",
-  "bgImage": "city.png"
+  "cameraFacing": "front",
+  "bgMode": "none",
+  "bgImage": "cafe.png",
+  "onekoEnabled": true,
+  "onekoSize": 3
 }

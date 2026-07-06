@@ -56,7 +56,8 @@ from .broadcaster import EventBroadcaster
 from .recorder    import RecordingManager
 from .pipeline    import Pipeline
 from .tcp_client  import AndroidTcpClient
-from .web_server  import BridgeServer
+from .web_server    import BridgeServer
+from .phone_stats  import PhoneStatsCollector
 
 
 def main() -> None:
@@ -90,6 +91,9 @@ def main() -> None:
     )
     server.set_pipeline(pipeline)
 
+    # ── 3b. Phone stats collector (ADB-based) ────────────────────────────────
+    phone_stats = PhoneStatsCollector(broadcaster)
+
     # ── 4. TCP client (connects to Android) ───────────────────────────────────
     def on_disconnect():
         broadcaster.update_stats(androidConnected=False)
@@ -109,6 +113,7 @@ def main() -> None:
     # ── 5. Shutdown handler ───────────────────────────────────────────────────
     def shutdown(sig=None, frame=None):
         print("\n[Bridge] Shutting down...")
+        phone_stats.stop()
         tcp_client.stop()
         pipeline.stop("Shutdown")
         recorder.kill()
@@ -127,6 +132,9 @@ def main() -> None:
 
     # TCP client starts connecting in background
     tcp_client.start()
+
+    # Phone stats collector starts polling via ADB
+    phone_stats.start()
 
     print(f"\nDashboard -> http://localhost:3000")
     print("Press Ctrl+C to stop.\n")

@@ -56,7 +56,7 @@ class EventBroadcaster:
         self._video_lock: threading.Lock    = threading.Lock()
         self._video_set:  Set[VideoClient]  = set()
 
-        # Live stats (updated by Pipeline / TcpClient)
+        # Live stats (updated by Pipeline / TcpClient / PhoneStatsCollector)
         self._stats: dict = {
             "androidConnected":  False,
             "h264ReceivedBytes": 0,
@@ -64,6 +64,16 @@ class EventBroadcaster:
             "vcamActive":        False,
             "bitrateKBs":        0.0,
             "recording":         False,
+            # Phone stats (populated by PhoneStatsCollector)
+            "phoneModel":          None,
+            "phoneAndroidVersion": None,
+            "phoneDeviceName":     None,
+            "phoneBattery":        None,
+            "phoneBatteryStatus":  None,
+            "phoneBatteryPlugged": None,
+            "phoneBatteryHealth":  None,
+            "phoneTemperature":    None,
+            "phoneUptime":         None,
         }
         self._last_bytes: int   = 0
         self._last_ts:    float = time.monotonic()

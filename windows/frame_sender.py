@@ -63,6 +63,8 @@ blur = 0
 vcam_enabled = True
 bg_mode = "none"   # "none" | "blur" | "replace"
 bg_image = ""      # filename within backgrounds/
+oneko_enabled = True
+oneko_size = 2.0
 
 _prev_settings = {}
 
@@ -71,7 +73,7 @@ def log(msg):
 
 def load_config(initial=False):
     global WIDTH, HEIGHT, mirror, orientation, zoom, brightness, contrast
-    global saturation, sharpness, blur, vcam_enabled, bg_mode, bg_image, _prev_settings
+    global saturation, sharpness, blur, vcam_enabled, bg_mode, bg_image, oneko_enabled, oneko_size, _prev_settings
     try:
         with open(config_path, "r", encoding="utf-8") as fh:
             cfg = json.load(fh)
@@ -96,18 +98,22 @@ def load_config(initial=False):
         vcam_enabled = cfg.get("vcamEnabled", True)
         bg_mode     = cfg.get("bgMode", "none")
         bg_image    = cfg.get("bgImage", "")
+        oneko_enabled = cfg.get("onekoEnabled", True)
+        oneko_size  = float(cfg.get("onekoSize", 2.0))
 
         current_state = {
             "mirror": mirror, "orientation": orientation, "zoom": zoom,
             "brightness": brightness, "contrast": contrast, "saturation": saturation,
             "sharpness": sharpness, "blur": blur, "vcam_enabled": vcam_enabled,
             "bg_mode": bg_mode, "bg_image": bg_image,
+            "oneko_enabled": oneko_enabled,
+            "oneko_size": oneko_size,
         }
 
         if not initial and current_state != _prev_settings:
             _prev_settings = current_state
             log(f"[PySender] Config updated: Zoom={zoom}x, Mirror={mirror}, "
-                f"Ori={orientation}deg, Blur={blur}, BgMode={bg_mode}, BgImage='{bg_image}'")
+                f"Ori={orientation}deg, Blur={blur}, BgMode={bg_mode}, BgImage='{bg_image}', Oneko={oneko_enabled}, OnekoSize={oneko_size}")
         elif initial:
             _prev_settings = current_state
     except Exception as e:
@@ -253,10 +259,168 @@ def apply_color_eq(frame_bgr, b, c):
     return cv2.LUT(frame_bgr, lut)
 
 
+class OnekoAnimator:
+    def __init__(self, sprite_sheet_path):
+        self.sprite_sheet = cv2.imread(sprite_sheet_path, cv2.IMREAD_UNCHANGED)
+        if self.sprite_sheet is None:
+            sys.stderr.write(f"[Oneko] ERROR: Could not load sprite sheet from {sprite_sheet_path}\n")
+        
+        # Sprite coordinates col, row mapping from the 8x4 sheet
+        self.sprite_sets = {
+            "idle":         [(3, 3)],
+            "alert":        [(7, 3)],
+            "scratchSelf":  [(5, 0), (6, 0), (7, 0)],
+            "scratchWallN": [(0, 0), (0, 1)],
+            "scratchWallS": [(7, 1), (6, 2)],
+            "scratchWallE": [(2, 2), (2, 3)],
+            "scratchWallW": [(4, 0), (4, 1)],
+            "tired":        [(3, 2)],
+            "sleeping":     [(2, 0), (2, 1)],
+            "N":  [(1, 2), (1, 3)],
+            "NE": [(0, 2), (0, 3)],
+            "E":  [(3, 0), (3, 1)],
+            "SE": [(5, 1), (5, 2)],
+            "S":  [(6, 3), (7, 2)],
+            "SW": [(5, 3), (6, 1)],
+            "W":  [(4, 2), (4, 3)],
+            "NW": [(1, 0), (1, 1)],
+        }
+        
+        self.sprite_size = 32
+        self.speed = 3
+        self.x = 100
+        self.y = 0
+        self.target_x = 200
+        
+        self.frame_count = 0
+        self.state_timer = 0
+        self.state_duration = 20
+        self.state = "idle"
+        self.sprite_name = "idle"
+        self.direction = 1
+
+    def tick(self, width, height):
+        if self.sprite_sheet is None:
+            return
+            
+        self.frame_count += 1
+        self.state_timer += 1
+        
+        scaled_size = int(self.sprite_size * oneko_size)
+        max_x = width - scaled_size
+        self.y = height - scaled_size
+        
+        if self.state == "idle":
+            self.sprite_name = "idle"
+            if self.state_timer >= self.state_duration:
+                self.pick_next_state(max_x, scaled_size)
+        elif self.state == "alert":
+            self.sprite_name = "alert"
+            if self.state_timer >= 5:
+                self.pick_next_state(max_x, scaled_size)
+        elif self.state == "walking":
+            dx = self.target_x - self.x
+            if abs(dx) < self.speed + 1:
+                self.x = self.target_x
+                self.state = "idle"
+                self.state_duration = np.random.randint(10, 30)
+                self.state_timer = 0
+                self.sprite_name = "idle"
+            else:
+                self.direction = 1 if dx > 0 else -1
+                self.x += self.direction * self.speed
+                self.x = max(0, min(max_x, self.x))
+                self.sprite_name = "E" if self.direction > 0 else "W"
+            if self.state_timer >= self.state_duration:
+                self.state = "idle"
+                self.state_duration = np.random.randint(10, 30)
+                self.state_timer = 0
+        elif self.state == "scratching":
+            if self.x <= 2:
+                self.sprite_name = "scratchWallW"
+            elif self.x >= max_x - 2:
+                self.sprite_name = "scratchWallE"
+            else:
+                self.sprite_name = "scratchSelf"
+            if self.state_timer >= self.state_duration:
+                self.pick_next_state(max_x, scaled_size)
+        elif self.state == "tired":
+            self.sprite_name = "tired"
+            if self.state_timer >= self.state_duration:
+                self.state = "sleeping"
+                self.state_duration = np.random.randint(60, 150)
+                self.state_timer = 0
+        elif self.state == "sleeping":
+            self.sprite_name = "sleeping"
+            if self.state_timer >= self.state_duration:
+                self.state = "alert"
+                self.state_duration = 5
+                self.state_timer = 0
+                
+    def pick_next_state(self, max_x, scaled_size):
+        roll = np.random.random()
+        if roll < 0.50:
+            self.state = "walking"
+            self.state_duration = np.random.randint(30, 80)
+            self.target_x = np.random.randint(scaled_size, max_x)
+        elif roll < 0.70:
+            self.state = "scratching"
+            self.state_duration = np.random.randint(15, 40)
+        elif roll < 0.85:
+            self.state = "tired"
+            self.state_duration = 8
+        else:
+            self.state = "idle"
+            self.state_duration = np.random.randint(10, 30)
+        self.state_timer = 0
+
+    def draw(self, frame_rgb):
+        if self.sprite_sheet is None:
+            return
+            
+        h, w = frame_rgb.shape[:2]
+        self.tick(w, h)
+        
+        # Get frame of current state
+        sprites = self.sprite_sets.get(self.sprite_name, [(3, 3)])
+        idx = (self.frame_count // 3) % len(sprites)
+        col, row = sprites[idx]
+        
+        # Extract 32x32 sprite from sheet
+        sy = row * self.sprite_size
+        sx = col * self.sprite_size
+        sprite = self.sprite_sheet[sy:sy+self.sprite_size, sx:sx+self.sprite_size]
+        
+        # Scale the sprite using nearest neighbor to preserve clean pixel art
+        scaled_size = int(self.sprite_size * oneko_size)
+        sprite = cv2.resize(sprite, (scaled_size, scaled_size), interpolation=cv2.INTER_NEAREST)
+        
+        # Ensure we draw inside boundaries
+        x_start = int(self.x)
+        y_start = int(self.y)
+        
+        if x_start < 0 or y_start < 0 or x_start + scaled_size > w or y_start + scaled_size > h:
+            return
+            
+        # Blend using alpha channel
+        sprite_bgr = sprite[:, :, :3]
+        sprite_alpha = sprite[:, :, 3] / 255.0
+        sprite_alpha_3d = np.stack([sprite_alpha]*3, axis=-1)
+        
+        roi = frame_rgb[y_start:y_start+scaled_size, x_start:x_start+scaled_size]
+        sprite_rgb = sprite_bgr[:, :, ::-1]
+        
+        blended = (sprite_rgb * sprite_alpha_3d + roi * (1.0 - sprite_alpha_3d)).astype(np.uint8)
+        frame_rgb[y_start:y_start+scaled_size, x_start:x_start+scaled_size] = blended
+
+
 
 def main():
     global py_cam, running, segmenter_loading, seg_input_frame, seg_input_w, seg_input_h
     log(f"[PySender] Starting Python frame_sender: {WIDTH}x{HEIGHT} @ {FPS}fps")
+
+    oneko_gif_path = os.path.join(os.path.dirname(config_path), "public", "img", "oneko.gif")
+    oneko_animator = OnekoAnimator(oneko_gif_path)
 
     stdin_buf = sys.stdin.buffer
     frames_processed = 0
@@ -353,6 +517,10 @@ def main():
                             bg_rgb = get_background_rgb(bg_image, w_rot, h_rot)
                             if bg_rgb is not None:
                                 frame_rgb = (frame_rgb * mask_3d + bg_rgb * (1.0 - mask_3d)).astype(np.uint8)
+
+                # 7.5 Draw Oneko Pet Overlay
+                if oneko_enabled and oneko_animator is not None:
+                    oneko_animator.draw(frame_rgb)
 
                 # 8. Send to Virtual Camera
                 if vcam_enabled:

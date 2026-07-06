@@ -1,6 +1,6 @@
 # USB Webcam Bridge — MVP
 
-Stream your Android phone's rear camera to your Windows PC over USB, appearing as a virtual webcam in Zoom, OBS, Teams, and more.
+Stream your Android phone's camera to your Windows PC over USB, appearing as a virtual webcam in Zoom, OBS, Teams, and more.
 
 ---
 

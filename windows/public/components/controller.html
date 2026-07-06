@@ -271,8 +271,74 @@
         </p>
       </div>
 
+      <!-- Oneko Pet toggle -->
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">Oneko Pet 🐱</span>
+        <div class="mech-toggle-control">
+          <div class="status-led" id="led-oneko"></div>
+          <label class="switch-mech">
+            <input type="checkbox" id="controller-oneko-checkbox" checked>
+            <span class="slider-mech"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Oneko Pet Size -->
+      <div class="mech-toggle-row" style="margin-top: 10px;">
+        <span class="mech-toggle-label">Pet Size 📏</span>
+        <div class="mech-toggle-control">
+          <select id="controller-oneko-size-select" class="select-mech" style="background: #1e293b; color: #f3f4f6; border: 1px solid rgba(255,255,255,0.12); padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500; font-family: 'Inter', sans-serif; cursor: pointer; outline: none; width: 90px; text-align: center;" onchange="Config.update()">
+            <option value="1.0">Normal (32px)</option>
+            <option value="1.5">Medium (48px)</option>
+            <option value="2.0" selected>Large (64px)</option>
+            <option value="2.5">X-Large (80px)</option>
+            <option value="3.0">Jumbo (96px)</option>
+          </select>
+        </div>
+      </div>
+
     </div>
 
+  </div>
+
+  <!-- 4. Phone Stats Card -->
+  <div class="controller-phone-stats-card">
+    <div class="phone-stats-header">
+      <span class="phone-stats-title">📱 Phone Status</span>
+      <span class="phone-stats-model" id="phone-model">—</span>
+    </div>
+    
+    <div class="phone-stats-grid">
+      <!-- Battery -->
+      <div class="phone-stat-item">
+        <div class="phone-stat-label">
+          <span id="phone-battery-icon">🔋</span>
+          Battery
+        </div>
+        <div class="phone-stat-value" id="phone-battery">—</div>
+        <div class="phone-battery-bar-track">
+          <div class="phone-battery-bar-fill" id="phone-battery-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Temperature -->
+      <div class="phone-stat-item">
+        <div class="phone-stat-label">🌡️ Temperature</div>
+        <div class="phone-stat-value" id="phone-temp">—</div>
+      </div>
+
+      <!-- Android Version -->
+      <div class="phone-stat-item">
+        <div class="phone-stat-label">🤖 System</div>
+        <div class="phone-stat-value" id="phone-version">—</div>
+      </div>
+
+      <!-- Uptime -->
+      <div class="phone-stat-item">
+        <div class="phone-stat-label">⏱️ Uptime</div>
+        <div class="phone-stat-value" id="phone-uptime">—</div>
+      </div>
+    </div>
   </div>
 
 </div>

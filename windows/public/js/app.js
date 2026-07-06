@@ -92,6 +92,16 @@ const Toast = {
 
     connectSSE();
 
+    // Wire up oneko toggle (if present in controller UI)
+    const onekoToggle = document.getElementById('controller-oneko-checkbox');
+    if (onekoToggle) {
+      onekoToggle.addEventListener('change', () => {
+        const led = document.getElementById('led-oneko');
+        if (led) led.classList.toggle('active', onekoToggle.checked);
+        Config.update();
+      });
+    }
+
     // ── Keyboard shortcuts ──────────────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
       // F11 → fullscreen feed

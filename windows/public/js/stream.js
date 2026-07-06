@@ -30,6 +30,14 @@ const Stream = (() => {
     recordDot:     () => document.getElementById('record-dot'),
     recordLabel:   () => document.getElementById('record-label'),
     sparkline:     () => document.getElementById('fps-sparkline'),
+    // Phone stats elements
+    phoneModel:    () => document.getElementById('phone-model'),
+    phoneBattery:  () => document.getElementById('phone-battery'),
+    phoneBatteryBar: () => document.getElementById('phone-battery-bar'),
+    phoneTemp:     () => document.getElementById('phone-temp'),
+    phoneUptime:   () => document.getElementById('phone-uptime'),
+    phoneVersion:  () => document.getElementById('phone-version'),
+    phoneBatteryIcon: () => document.getElementById('phone-battery-icon'),
   };
 
   let prevDecodedFrames = 0;
@@ -209,6 +217,67 @@ const Stream = (() => {
     // Recording indicator
     if (data.recording !== undefined) {
       _setRecordingUI(data.recording);
+    }
+
+    // ── Phone stats ────────────────────────────────────────────────────────
+    _handlePhoneStats(data);
+  }
+
+  function _handlePhoneStats(data) {
+    // Model
+    if (data.phoneModel) {
+      const pm = el.phoneModel();
+      if (pm) pm.textContent = data.phoneModel;
+    }
+    // Android version
+    if (data.phoneAndroidVersion) {
+      const pv = el.phoneVersion();
+      if (pv) pv.textContent = 'Android ' + data.phoneAndroidVersion;
+    }
+    // Battery
+    if (data.phoneBattery !== undefined && data.phoneBattery !== null) {
+      const pb = el.phoneBattery();
+      const pbar = el.phoneBatteryBar();
+      const picon = el.phoneBatteryIcon();
+      const level = data.phoneBattery;
+      const status = data.phoneBatteryStatus || '';
+      const plugged = data.phoneBatteryPlugged || '';
+      const isCharging = status === 'charging' || status === 'full';
+
+      if (pb) {
+        let statusText = level + '%';
+        if (isCharging) statusText += ' ⚡';
+        pb.textContent = statusText;
+      }
+      if (pbar) {
+        pbar.style.width = Math.min(100, level) + '%';
+        // Color based on level
+        if (level > 60) pbar.style.background = 'var(--accent-emerald, #10b981)';
+        else if (level > 25) pbar.style.background = 'var(--accent-orange, #f59e0b)';
+        else pbar.style.background = 'var(--accent-rose, #f43f5e)';
+      }
+      if (picon) {
+        picon.textContent = isCharging ? '🔌' : (level > 60 ? '🔋' : (level > 25 ? '🪫' : '🪫'));
+      }
+    }
+    // Temperature
+    if (data.phoneTemperature !== undefined && data.phoneTemperature !== null) {
+      const pt = el.phoneTemp();
+      if (pt) {
+        const temp = data.phoneTemperature;
+        pt.textContent = temp.toFixed(1) + '°C';
+        pt.style.color = temp > 40 ? 'var(--accent-rose, #f43f5e)' : 'var(--text-muted, #9ca3af)';
+      }
+    }
+    // Uptime
+    if (data.phoneUptime !== undefined && data.phoneUptime !== null) {
+      const pu = el.phoneUptime();
+      if (pu) {
+        const secs = data.phoneUptime;
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        pu.textContent = h + 'h ' + m + 'm';
+      }
     }
   }
 
