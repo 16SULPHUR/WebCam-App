@@ -9,6 +9,11 @@ const Config = (() => {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   let _loading = false;  // suppress spurious saves while load() applies slider values
+  let _customPets = [];
+  let _skins = [];
+  let _targetPetIndex = null;
+  let _skinFilterMode = 'all';
+  let _favorites = JSON.parse(localStorage.getItem('neko_favorites') || '[]');
 
   function el(id) { return document.getElementById(id); }
 
@@ -41,9 +46,23 @@ const Config = (() => {
       if (el('vcam-checkbox'))     el('vcam-checkbox').checked    = cfg.vcamEnabled !== false;
       if (el('camera-facing-select')) el('camera-facing-select').value = cfg.cameraFacing || 'back';
       if (el('controller-oneko-checkbox')) el('controller-oneko-checkbox').checked = cfg.onekoEnabled !== false;
+      if (el('controller-oneko-size-range')) {
+        el('controller-oneko-size-range').value = cfg.onekoSize ?? 2.0;
+        onOnekoSizeChange(cfg.onekoSize ?? 2.0);
+      }
+
       const ledOneko = el('led-oneko');
       if (ledOneko) ledOneko.classList.toggle('active', cfg.onekoEnabled !== false);
-      if (el('controller-oneko-size-select')) el('controller-oneko-size-select').value = String(cfg.onekoSize ?? 2.0);
+
+      _customPets = cfg.customPets || [];
+      if (!Array.isArray(_customPets)) {
+        _customPets = [];
+      }
+      if (_customPets.length === 0) {
+        _customPets = [{ skin: cfg.customOnekoSkin || 'socks', enabled: !!cfg.customOnekoEnabled }];
+      }
+      await loadSkinsList();
+      renderCustomPets();
 
       // Virtual background
       const bgMode = cfg.bgMode || 'none';
@@ -135,6 +154,10 @@ const Config = (() => {
     const ledVcam = el('led-vcam');
     if (ledVcam) {
       ledVcam.classList.toggle('active', vcamActive);
+    }
+    const ledOneko = el('led-oneko');
+    if (ledOneko) {
+      ledOneko.classList.toggle('active', el('controller-oneko-checkbox')?.checked || false);
     }
   }
 
@@ -447,7 +470,10 @@ const Config = (() => {
       bgMode:      _bgMode,
       bgImage:     _bgImage,
       onekoEnabled: (el('controller-oneko-checkbox') ? el('controller-oneko-checkbox').checked : true),
-      onekoSize:   parseFloat(el('controller-oneko-size-select')?.value || 2.0),
+      onekoSize:   parseFloat(el('controller-oneko-size-range')?.value || 2.0),
+      customPets:  _customPets,
+      customOnekoEnabled: _customPets[0] ? _customPets[0].enabled : false,
+      customOnekoSkin: _customPets[0] ? _customPets[0].skin : 'socks',
     };
 
     console.log(
@@ -483,6 +509,322 @@ const Config = (() => {
     }
   }
 
-  return { load, update, onOrientationChange, onZoomChange, onProcessingChange, resetProcessing, resetSingle, updateFromController, onOrientationChangeFromController, setBgMode, loadBackgrounds };
+  let onekoSizeTimeout = null;
+  function onOnekoSizeChange(val) {
+    const span = el('controller-oneko-size-val');
+    if (span) span.textContent = parseFloat(val).toFixed(1) + 'x';
+    const range = el('controller-oneko-size-range');
+    if (range) range.value = val;
+
+    if (_loading) return;
+    clearTimeout(onekoSizeTimeout);
+    onekoSizeTimeout = setTimeout(update, 250);
+  }
+
+  async function loadSkinsList() {
+    if (_skins.length > 0) return;
+    try {
+      const res = await fetch('/api/skins');
+      if (!res.ok) throw new Error(res.statusText);
+      const data = await res.json();
+      _skins = data.skins || [];
+    } catch (err) {
+      console.error('Failed to load skins list:', err);
+    }
+  }
+
+  function renderCustomPets() {
+    const list = el('controller-custom-pets-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (_customPets.length === 0) {
+      list.innerHTML = '<div style="font-size: 11px; color: #6b7280; text-align: center; padding: 6px; border: 1px dashed rgba(255,255,255,0.06); border-radius: 6px;">No custom pets active.</div>';
+      return;
+    }
+
+    _customPets.forEach((pet, index) => {
+      const row = document.createElement('div');
+      row.style = 'background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 8px 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px;';
+
+      const header = document.createElement('div');
+      header.style = 'display: flex; align-items: center; justify-content: space-between; width: 100%;';
+
+      const titleLeft = document.createElement('div');
+      titleLeft.style = 'display: flex; align-items: center; gap: 6px;';
+
+      const led = document.createElement('div');
+      led.className = 'status-led' + (pet.enabled ? ' active' : '');
+      led.id = `led-custom-oneko-${index}`;
+
+      const label = document.createElement('span');
+      label.textContent = `Custom Pet #${index + 1}`;
+      label.style = 'font-size: 11px; font-weight: 600; color: #e2e8f0; font-family: "Inter", sans-serif;';
+
+      titleLeft.appendChild(led);
+      titleLeft.appendChild(label);
+
+      const rightControls = document.createElement('div');
+      rightControls.style = 'display: flex; align-items: center; gap: 8px;';
+
+      const swLabel = document.createElement('label');
+      swLabel.className = 'switch-mech';
+      const swInput = document.createElement('input');
+      swInput.type = 'checkbox';
+      swInput.checked = !!pet.enabled;
+      swInput.onchange = (e) => {
+        pet.enabled = e.target.checked;
+        led.classList.toggle('active', pet.enabled);
+        update();
+      };
+      const swSpan = document.createElement('span');
+      swSpan.className = 'slider-mech';
+      swLabel.appendChild(swInput);
+      swLabel.appendChild(swSpan);
+
+      const delBtn = document.createElement('button');
+      delBtn.innerHTML = '&times;';
+      delBtn.style = 'background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; border-radius: 4px; padding: 0px 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; line-height: 1; border: none; height: 18px;';
+      delBtn.onclick = () => removeCustomPet(index);
+
+      rightControls.appendChild(swLabel);
+      rightControls.appendChild(delBtn);
+      header.appendChild(titleLeft);
+      header.appendChild(rightControls);
+
+      const selectorRow = document.createElement('div');
+      selectorRow.style = 'display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px;';
+
+      const selSelect = document.createElement('select');
+      selSelect.className = 'ctrl-select ctrl-select-mech';
+      selSelect.style = 'background: #0f172a; color: #f3f4f6; border: 1px solid rgba(255,255,255,0.08); padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; cursor: pointer; outline: none; flex: 1; height: 24px; min-width: 0; text-align: center;';
+
+      // Sort skins: favorites first, then alphabetical
+      const sortedSkinsForDropdown = [..._skins].sort((a, b) => {
+        const isAFav = _favorites.includes(a);
+        const isBFav = _favorites.includes(b);
+        if (isAFav && !isBFav) return -1;
+        if (!isAFav && isBFav) return 1;
+        return a.localeCompare(b);
+      });
+
+      sortedSkinsForDropdown.forEach(skin => {
+        const opt = document.createElement('option');
+        opt.value = skin;
+        opt.textContent = (skin + (_favorites.includes(skin) ? ' ❤️' : ''));
+        if (skin === pet.skin) opt.selected = true;
+        selSelect.appendChild(opt);
+      });
+
+      selSelect.onchange = (e) => {
+        pet.skin = e.target.value;
+        update();
+      };
+
+      const browseBtn = document.createElement('button');
+      browseBtn.className = 'mech-press-btn btn-silver';
+      browseBtn.textContent = 'Browse 🎨';
+      browseBtn.style = 'padding: 0px 8px; font-size: 10px; border-radius: 4px; height: 24px; display: flex; align-items: center; justify-content: center;';
+      browseBtn.onclick = () => openSkinModal(index);
+
+      selectorRow.appendChild(selSelect);
+      selectorRow.appendChild(browseBtn);
+
+      row.appendChild(header);
+      row.appendChild(selectorRow);
+      list.appendChild(row);
+    });
+  }
+
+  function addCustomPet() {
+    _customPets.push({ skin: 'socks', enabled: true });
+    renderCustomPets();
+    update();
+  }
+
+  function removeCustomPet(index) {
+    _customPets.splice(index, 1);
+    renderCustomPets();
+    update();
+  }
+
+  function openSkinModal(petIndex) {
+    _targetPetIndex = petIndex;
+    const modal = el('skin-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    setTimeout(() => {
+      modal.style.opacity = '1';
+      const content = el('skin-modal-content');
+      if (content) content.style.transform = 'scale(1)';
+    }, 10);
+    renderSkinsGrid();
+  }
+
+  function closeSkinModal() {
+    const modal = el('skin-modal');
+    if (!modal) return;
+    modal.style.opacity = '0';
+    const content = el('skin-modal-content');
+    if (content) content.style.transform = 'scale(0.95)';
+    setTimeout(() => {
+      modal.style.display = 'none';
+    }, 200);
+  }
+
+  function setSkinFilter(mode) {
+    _skinFilterMode = mode;
+    const btnAll = el('filter-btn-all');
+    const btnFav = el('filter-btn-fav');
+    if (mode === 'all') {
+      if (btnAll) {
+        btnAll.style.background = '#06b6d4';
+        btnAll.style.color = '#fff';
+      }
+      if (btnFav) {
+        btnFav.style.background = 'transparent';
+        btnFav.style.border = '1px solid rgba(255,255,255,0.1)';
+        btnFav.style.color = '#9ca3af';
+      }
+    } else {
+      if (btnAll) {
+        btnAll.style.background = 'transparent';
+        btnAll.style.border = '1px solid rgba(255,255,255,0.1)';
+        btnAll.style.color = '#9ca3af';
+      }
+      if (btnFav) {
+        btnFav.style.background = '#06b6d4';
+        btnFav.style.color = '#fff';
+        btnFav.style.border = 'none';
+      }
+    }
+    renderSkinsGrid();
+  }
+
+  function filterSkins() {
+    renderSkinsGrid();
+  }
+
+  function toggleFavorite(skinName, event) {
+    event.stopPropagation();
+    const idx = _favorites.indexOf(skinName);
+    if (idx === -1) {
+      _favorites.push(skinName);
+    } else {
+      _favorites.splice(idx, 1);
+    }
+    localStorage.setItem('neko_favorites', JSON.stringify(_favorites));
+    renderSkinsGrid();
+    renderCustomPets(); // update dropdown list labels
+  }
+
+  let previewInterval = null;
+  function renderSkinsGrid() {
+    const grid = el('skin-modal-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    const query = el('skin-search-input')?.value.toLowerCase().trim() || '';
+
+    // Sort skins: favorites first, then alphabetical
+    const sortedSkins = [..._skins].sort((a, b) => {
+      const isAFav = _favorites.includes(a);
+      const isBFav = _favorites.includes(b);
+      if (isAFav && !isBFav) return -1;
+      if (!isAFav && isBFav) return 1;
+      return a.localeCompare(b);
+    });
+
+    const filtered = sortedSkins.filter(skin => {
+      if (_skinFilterMode === 'fav' && !_favorites.includes(skin)) return false;
+      if (query && !skin.toLowerCase().includes(query)) return false;
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #6b7280; font-size: 11px; padding: 20px;">No skins found.</div>';
+      return;
+    }
+
+    filtered.forEach(skin => {
+      const isFav = _favorites.includes(skin);
+      const card = document.createElement('div');
+      card.style = 'background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; transition: all 0.2s ease;';
+
+      card.onmouseenter = () => {
+        card.style.background = 'rgba(255,255,255,0.06)';
+        card.style.borderColor = '#06b6d4';
+        
+        let phase = 1;
+        if (previewInterval) clearInterval(previewInterval);
+        previewInterval = setInterval(() => {
+          img.src = `/skins/${skin}/${phase === 1 ? 'erun1' : 'erun2'}.png`;
+          phase = phase === 1 ? 2 : 1;
+        }, 150);
+      };
+      card.onmouseleave = () => {
+        card.style.background = 'rgba(255,255,255,0.03)';
+        card.style.borderColor = 'rgba(255,255,255,0.06)';
+        if (previewInterval) {
+          clearInterval(previewInterval);
+          previewInterval = null;
+        }
+        img.src = `/skins/${skin}/still.png`;
+      };
+
+      const heart = document.createElement('button');
+      heart.style = 'position: absolute; top: 4px; right: 4px; background: none; border: none; outline: none; cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center;';
+      heart.innerHTML = `
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="${isFav ? '#ef4444' : 'none'}" stroke="${isFav ? 'none' : '#9ca3af'}" stroke-width="2">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+      `;
+      heart.onclick = (e) => toggleFavorite(skin, e);
+
+      const img = document.createElement('img');
+      img.src = `/skins/${skin}/still.png`;
+      img.alt = skin;
+      img.style = 'width: 32px; height: 32px; image-rendering: pixelated; margin-bottom: 6px;';
+
+      const name = document.createElement('div');
+      name.textContent = skin;
+      name.style = 'font-size: 9px; font-weight: 500; color: #cbd5e1; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "Inter", sans-serif;';
+
+      card.onclick = () => selectSkin(skin);
+
+      card.appendChild(heart);
+      card.appendChild(img);
+      card.appendChild(name);
+      grid.appendChild(card);
+    });
+  }
+
+  function selectSkin(skinName) {
+    if (_targetPetIndex !== null && _targetPetIndex < _customPets.length) {
+      _customPets[_targetPetIndex].skin = skinName;
+      renderCustomPets();
+      update();
+    }
+    closeSkinModal();
+  }
+
+  return { 
+    load, 
+    update, 
+    onOrientationChange, 
+    onZoomChange, 
+    onProcessingChange, 
+    resetProcessing, 
+    resetSingle, 
+    updateFromController, 
+    onOrientationChangeFromController, 
+    setBgMode, 
+    loadBackgrounds, 
+    onOnekoSizeChange,
+    addCustomPet,
+    closeSkinModal,
+    filterSkins,
+    setSkinFilter
+  };
 })();
 

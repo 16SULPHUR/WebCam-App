@@ -65,6 +65,9 @@ bg_mode = "none"   # "none" | "blur" | "replace"
 bg_image = ""      # filename within backgrounds/
 oneko_enabled = True
 oneko_size = 2.0
+custom_oneko_enabled = False
+custom_oneko_skin = "socks"
+custom_pets_config = []
 
 _prev_settings = {}
 
@@ -73,7 +76,8 @@ def log(msg):
 
 def load_config(initial=False):
     global WIDTH, HEIGHT, mirror, orientation, zoom, brightness, contrast
-    global saturation, sharpness, blur, vcam_enabled, bg_mode, bg_image, oneko_enabled, oneko_size, _prev_settings
+    global saturation, sharpness, blur, vcam_enabled, bg_mode, bg_image, oneko_enabled, oneko_size
+    global custom_oneko_enabled, custom_oneko_skin, custom_pets_config, _prev_settings
     try:
         with open(config_path, "r", encoding="utf-8") as fh:
             cfg = json.load(fh)
@@ -100,6 +104,16 @@ def load_config(initial=False):
         bg_image    = cfg.get("bgImage", "")
         oneko_enabled = cfg.get("onekoEnabled", True)
         oneko_size  = float(cfg.get("onekoSize", 2.0))
+        custom_oneko_enabled = cfg.get("customOnekoEnabled", False)
+        custom_oneko_skin  = cfg.get("customOnekoSkin", "socks")
+        
+        custom_pets_config = cfg.get("customPets", [])
+        if not isinstance(custom_pets_config, list):
+            custom_pets_config = []
+            
+        # Fallback for backward compatibility
+        if not custom_pets_config:
+            custom_pets_config = [{"skin": custom_oneko_skin, "enabled": custom_oneko_enabled}]
 
         current_state = {
             "mirror": mirror, "orientation": orientation, "zoom": zoom,
@@ -108,12 +122,13 @@ def load_config(initial=False):
             "bg_mode": bg_mode, "bg_image": bg_image,
             "oneko_enabled": oneko_enabled,
             "oneko_size": oneko_size,
+            "custom_pets": json.dumps(custom_pets_config),
         }
 
         if not initial and current_state != _prev_settings:
             _prev_settings = current_state
             log(f"[PySender] Config updated: Zoom={zoom}x, Mirror={mirror}, "
-                f"Ori={orientation}deg, Blur={blur}, BgMode={bg_mode}, BgImage='{bg_image}', Oneko={oneko_enabled}, OnekoSize={oneko_size}")
+                f"Ori={orientation}deg, Blur={blur}, BgMode={bg_mode}, BgImage='{bg_image}', Oneko={oneko_enabled}, OnekoSize={oneko_size}, CustomPets={custom_pets_config}")
         elif initial:
             _prev_settings = current_state
     except Exception as e:
@@ -259,12 +274,70 @@ def apply_color_eq(frame_bgr, b, c):
     return cv2.LUT(frame_bgr, lut)
 
 
+COORDS_TO_FILE = {
+    # Scratch Wall
+    (0, 0): "nscratch1",
+    (0, 1): "nscratch2",
+    (7, 1): "sscratch1",
+    (6, 2): "sscratch2",
+    (4, 0): "wscratch1",
+    (4, 1): "wscratch2",
+    (2, 2): "escratch1",
+    (2, 3): "escratch2",
+    # Runs
+    (1, 2): "nrun1",
+    (1, 3): "nrun2",
+    (0, 2): "nerun1",
+    (0, 3): "nerun2",
+    (3, 0): "erun1",
+    (3, 1): "erun2",
+    (5, 1): "serun1",
+    (5, 2): "serun2",
+    (6, 3): "srun1",
+    (7, 2): "srun2",
+    (5, 3): "swrun1",
+    (6, 1): "swrun2",
+    (4, 2): "wrun1",
+    (4, 3): "wrun2",
+    (1, 0): "nwrun1",
+    (1, 1): "nwrun2",
+    # States
+    (3, 3): "still",
+    (7, 3): "alert",
+    (5, 0): "wash",
+    (6, 0): "itch1",
+    (7, 0): "itch2",
+    (3, 2): "yawn",
+    (2, 0): "sleep1",
+    (2, 1): "sleep2",
+}
+
 class OnekoAnimator:
-    def __init__(self, sprite_sheet_path):
-        self.sprite_sheet = cv2.imread(sprite_sheet_path, cv2.IMREAD_UNCHANGED)
-        if self.sprite_sheet is None:
-            sys.stderr.write(f"[Oneko] ERROR: Could not load sprite sheet from {sprite_sheet_path}\n")
+    def __init__(self, sprite_sheet_path=None, is_custom=False):
+        self.is_custom = is_custom
+        self.sprite_sheet = None
+        self.custom_frames = {}  # (col, row) -> image_array
+        self.current_skin = None
+        self.sprite_size = 32
+        self.speed = 3
         
+        # Stagger starting positions so they don't overlap exactly
+        self.x = 180 if is_custom else 80
+        self.y = 0
+        self.target_x = 280 if is_custom else 140
+        
+        self.frame_count = 0
+        self.state_timer = 0
+        self.state_duration = 20
+        self.state = "idle"
+        self.sprite_name = "idle"
+        self.direction = 1
+
+        if not is_custom and sprite_sheet_path:
+            self.sprite_sheet = cv2.imread(sprite_sheet_path, cv2.IMREAD_UNCHANGED)
+            if self.sprite_sheet is None:
+                sys.stderr.write(f"[Oneko] ERROR: Could not load sprite sheet from {sprite_sheet_path}\n")
+
         # Sprite coordinates col, row mapping from the 8x4 sheet
         self.sprite_sets = {
             "idle":         [(3, 3)],
@@ -285,28 +358,47 @@ class OnekoAnimator:
             "W":  [(4, 2), (4, 3)],
             "NW": [(1, 0), (1, 1)],
         }
-        
-        self.sprite_size = 32
-        self.speed = 3
-        self.x = 100
-        self.y = 0
-        self.target_x = 200
-        
-        self.frame_count = 0
-        self.state_timer = 0
-        self.state_duration = 20
-        self.state = "idle"
-        self.sprite_name = "idle"
-        self.direction = 1
 
-    def tick(self, width, height):
-        if self.sprite_sheet is None:
+    def preload_custom_skin(self, skin_name):
+        if self.current_skin == skin_name:
+            return
+        
+        self.custom_frames.clear()
+        self.current_skin = skin_name
+        
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        skin_dir = os.path.join(base_dir, "neko", "2023-icon-library", skin_name)
+        
+        if not os.path.isdir(skin_dir):
+            sys.stderr.write(f"[Oneko] Custom skin dir not found: {skin_dir}\n")
             return
             
+        sys.stderr.write(f"[Oneko] Preloading custom skin: {skin_name}\n")
+        
+        loaded_count = 0
+        for (col, row), filename in COORDS_TO_FILE.items():
+            img_path = os.path.join(skin_dir, f"{filename}.png")
+            if os.path.isfile(img_path):
+                img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+                if img is not None:
+                    # Ensure 4 channels (BGRA)
+                    if len(img.shape) == 2:
+                        # Grayscale -> BGRA
+                        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGRA)
+                    elif img.shape[2] == 3:
+                        # BGR -> BGRA
+                        img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+                    
+                    self.custom_frames[(col, row)] = img
+                    loaded_count += 1
+                    
+        sys.stderr.write(f"[Oneko] Preloaded {loaded_count}/32 frames for custom skin: {skin_name}\n")
+
+    def tick(self, width, height, scale):
         self.frame_count += 1
         self.state_timer += 1
         
-        scaled_size = int(self.sprite_size * oneko_size)
+        scaled_size = int(self.sprite_size * scale)
         max_x = width - scaled_size
         self.y = height - scaled_size
         
@@ -374,25 +466,35 @@ class OnekoAnimator:
             self.state_duration = np.random.randint(10, 30)
         self.state_timer = 0
 
-    def draw(self, frame_rgb):
-        if self.sprite_sheet is None:
+    def draw(self, frame_rgb, scale):
+        if not self.is_custom and self.sprite_sheet is None:
+            return
+        if self.is_custom and not self.custom_frames:
             return
             
         h, w = frame_rgb.shape[:2]
-        self.tick(w, h)
+        self.tick(w, h, scale)
         
         # Get frame of current state
         sprites = self.sprite_sets.get(self.sprite_name, [(3, 3)])
         idx = (self.frame_count // 3) % len(sprites)
         col, row = sprites[idx]
         
-        # Extract 32x32 sprite from sheet
-        sy = row * self.sprite_size
-        sx = col * self.sprite_size
-        sprite = self.sprite_sheet[sy:sy+self.sprite_size, sx:sx+self.sprite_size]
+        if self.is_custom:
+            sprite = self.custom_frames.get((col, row))
+            if sprite is None:
+                # fallback to still
+                sprite = self.custom_frames.get((3, 3))
+            if sprite is None:
+                return
+        else:
+            # Extract 32x32 sprite from sheet
+            sy = row * self.sprite_size
+            sx = col * self.sprite_size
+            sprite = self.sprite_sheet[sy:sy+self.sprite_size, sx:sx+self.sprite_size]
         
         # Scale the sprite using nearest neighbor to preserve clean pixel art
-        scaled_size = int(self.sprite_size * oneko_size)
+        scaled_size = int(self.sprite_size * scale)
         sprite = cv2.resize(sprite, (scaled_size, scaled_size), interpolation=cv2.INTER_NEAREST)
         
         # Ensure we draw inside boundaries
@@ -420,7 +522,8 @@ def main():
     log(f"[PySender] Starting Python frame_sender: {WIDTH}x{HEIGHT} @ {FPS}fps")
 
     oneko_gif_path = os.path.join(os.path.dirname(config_path), "public", "img", "oneko.gif")
-    oneko_animator = OnekoAnimator(oneko_gif_path)
+    oneko_animator = OnekoAnimator(oneko_gif_path, is_custom=False)
+    custom_animators = []
 
     stdin_buf = sys.stdin.buffer
     frames_processed = 0
@@ -430,6 +533,21 @@ def main():
             # Poll configuration changes every 10 frames (~300ms at 30fps)
             if frames_processed % 10 == 0:
                 load_config(initial=False)
+                
+                # Sync animators count with customPets config list
+                while len(custom_animators) < len(custom_pets_config):
+                    new_animator = OnekoAnimator(is_custom=True)
+                    # Randomise coordinates so multiple custom pets start at different positions
+                    new_animator.x = np.random.randint(50, 450)
+                    new_animator.target_x = np.random.randint(50, 450)
+                    custom_animators.append(new_animator)
+                while len(custom_animators) > len(custom_pets_config):
+                    custom_animators.pop()
+                    
+                # Preload custom skins for each animator slot
+                for idx, pet_cfg in enumerate(custom_pets_config):
+                    skin_name = pet_cfg.get("skin", "socks")
+                    custom_animators[idx].preload_custom_skin(skin_name)
 
             # Lazy-load MediaPipe when any background effect is needed
             needs_segmentation = bg_mode in ("blur", "replace")
@@ -520,7 +638,10 @@ def main():
 
                 # 7.5 Draw Oneko Pet Overlay
                 if oneko_enabled and oneko_animator is not None:
-                    oneko_animator.draw(frame_rgb)
+                    oneko_animator.draw(frame_rgb, oneko_size)
+                for idx, pet_cfg in enumerate(custom_pets_config):
+                    if pet_cfg.get("enabled", False) and idx < len(custom_animators):
+                        custom_animators[idx].draw(frame_rgb, oneko_size)
 
                 # 8. Send to Virtual Camera
                 if vcam_enabled:
