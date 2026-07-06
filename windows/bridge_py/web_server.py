@@ -77,8 +77,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 })
             elif path == "/api/backgrounds":
                 self._handle_list_backgrounds()
+            elif path == "/api/skins":
+                self._handle_list_skins()
             elif path.startswith("/backgrounds/"):
                 self._handle_serve_background(path)
+            elif path.startswith("/skins/"):
+                self._handle_serve_skin(path)
             elif path.startswith("/video_feed"):
                 self._handle_video()
             elif path == "/logs":
@@ -363,6 +367,49 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(data)
+
+    def _handle_serve_skin(self, path: str) -> None:
+        """Serve a skin PNG frame file from neko/2023-icon-library/."""
+        parts = [p for p in path.split("/") if p]
+        if len(parts) < 3:
+            self.send_error(404)
+            return
+        skin_name = parts[1]
+        filename = parts[2]
+        # Sanitise
+        if ".." in skin_name or ".." in filename:
+            self.send_error(400)
+            return
+            
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        abs_path = os.path.join(base_dir, "neko", "2023-icon-library", skin_name, filename)
+        
+        if not os.path.isfile(abs_path):
+            self.send_error(404)
+            return
+            
+        with open(abs_path, "rb") as fh:
+            data = fh.read()
+            
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "max-age=86400")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _handle_list_skins(self) -> None:
+        """Return JSON list of skin names in the neko/2023-icon-library directory."""
+        # Since web_server.py is in WebCam App/windows/bridge_py/, its grand-parent is WebCam App/
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        skins_dir = os.path.join(base_dir, "neko", "2023-icon-library")
+        skins = []
+        if os.path.isdir(skins_dir):
+            for name in sorted(os.listdir(skins_dir)):
+                if os.path.isdir(os.path.join(skins_dir, name)) and not name.startswith("."):
+                    skins.append(name)
+        self._json({"skins": skins})
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

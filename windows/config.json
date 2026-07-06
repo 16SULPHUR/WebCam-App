@@ -12,7 +12,27 @@
   "blur": 25,
   "cameraFacing": "front",
   "bgMode": "none",
-  "bgImage": "cafe.png",
+  "bgImage": "city.png",
   "onekoEnabled": true,
-  "onekoSize": 3
+  "onekoSize": 4,
+  "customOnekoEnabled": true,
+  "customOnekoSkin": "zelda3",
+  "customPets": [
+    {
+      "skin": "zelda3",
+      "enabled": true
+    },
+    {
+      "skin": "dave",
+      "enabled": true
+    },
+    {
+      "skin": "jess",
+      "enabled": true
+    },
+    {
+      "skin": "sonic",
+      "enabled": true
+    }
+  ]
 }
