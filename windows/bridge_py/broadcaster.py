@@ -104,16 +104,24 @@ class EventBroadcaster:
             import sys
             # Replace old "node" stack label with "system"
             display_source = "system" if source == "node" else source
-            # Print to server terminal console safely
-            try:
-                print(f"[{display_source.upper()}] {msg}", flush=True)
-            except Exception:
+            
+            # Check if TUI is active, and forward logs to it instead of standard stdout printing
+            from .tui import TuiManager
+            tui = TuiManager.get_instance()
+            if tui and tui.running:
+                tui.log(display_source, msg)
+            else:
+                # Print to server terminal console safely (fallback)
                 try:
-                    enc = sys.stdout.encoding or "utf-8"
-                    safe_msg = msg.encode(enc, errors="replace").decode(enc)
-                    print(f"[{display_source.upper()}] {safe_msg}", flush=True)
+                    print(f"[{display_source.upper()}] {msg}", flush=True)
                 except Exception:
-                    pass
+                    try:
+                        enc = sys.stdout.encoding or "utf-8"
+                        safe_msg = msg.encode(enc, errors="replace").decode(enc)
+                        print(f"[{display_source.upper()}] {safe_msg}", flush=True)
+                    except Exception:
+                        pass
+            
             self._broadcast_sse({"type": "log", "source": display_source, "message": msg})
 
     def broadcast_status(self) -> None:
@@ -125,10 +133,10 @@ class EventBroadcaster:
         )
         self._last_bytes = self._stats["h264ReceivedBytes"]
         self._last_ts    = now
+        self._stats["bitrateKBs"] = max(0.0, round(bitrate, 1))
         self._broadcast_sse({
             "type": "status",
             **self._stats,
-            "bitrateKBs": max(0.0, round(bitrate, 1)),
         })
 
     def update_stats(self, **kwargs) -> None:

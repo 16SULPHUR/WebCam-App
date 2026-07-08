@@ -11,7 +11,7 @@
   "targetFps": 30,
   "blur": 25,
   "cameraFacing": "back",
-  "bgMode": "none",
+  "bgMode": "replace",
   "bgImage": "BG 1.png",
   "segmentationEngine": "rvm",
   "rvmDownsampleRatio": 0.5,

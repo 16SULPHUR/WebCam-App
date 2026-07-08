@@ -76,6 +76,11 @@ def main() -> None:
     broadcaster = EventBroadcaster()
     recorder    = RecordingManager(FFMPEG_PATH, BASE_DIR, broadcaster)
 
+    # Initialize TUI
+    from .tui import TuiManager, run_tui_loop
+    use_tui = sys.stdout.isatty() and "--no-tui" not in sys.argv
+    tui = TuiManager(broadcaster, config) if use_tui else None
+
     # ── 2. HTTP server ────────────────────────────────────────────────────────
     server = BridgeServer(config, broadcaster, recorder, PUBLIC_DIR, port=3000)
 
@@ -118,32 +123,51 @@ def main() -> None:
         pipeline.stop("Shutdown")
         recorder.kill()
         server.stop()
+        if use_tui and tui:
+            tui.stop()
         sys.exit(0)
 
     signal.signal(signal.SIGINT,  shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
     # ── 6. Start everything ───────────────────────────────────────────────────
-    # HTTP server in a daemon thread
-    threading.Thread(target=server.start, daemon=True, name="WebServer").start()
+    if use_tui and tui:
+        with tui:
+            # Spawn TUI rendering update thread
+            tui_thread = threading.Thread(target=run_tui_loop, args=(tui,), daemon=True, name="TuiLoop")
+            tui_thread.start()
 
-    # Pipeline starts immediately (waits for Android data via feed())
-    pipeline.start()
+            # HTTP server in a daemon thread
+            threading.Thread(target=server.start, daemon=True, name="WebServer").start()
 
-    # TCP client starts connecting in background
-    tcp_client.start()
+            # Pipeline starts immediately (waits for Android data via feed())
+            pipeline.start()
 
-    # Phone stats collector starts polling via ADB
-    phone_stats.start()
+            # TCP client starts connecting in background
+            tcp_client.start()
 
-    print(f"\nDashboard -> http://localhost:3000")
-    print("Press Ctrl+C to stop.\n")
+            # Phone stats collector starts polling via ADB
+            phone_stats.start()
 
-    # Block main thread
-    try:
-        threading.Event().wait()
-    except KeyboardInterrupt:
-        shutdown()
+            # Block main thread
+            try:
+                threading.Event().wait()
+            except KeyboardInterrupt:
+                shutdown()
+    else:
+        # Fallback raw terminal layout
+        threading.Thread(target=server.start, daemon=True, name="WebServer").start()
+        pipeline.start()
+        tcp_client.start()
+        phone_stats.start()
+
+        print(f"\nDashboard -> http://localhost:3000")
+        print("Press Ctrl+C to stop.\n")
+
+        try:
+            threading.Event().wait()
+        except KeyboardInterrupt:
+            shutdown()
 
 
 if __name__ == "__main__":
