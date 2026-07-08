@@ -69,6 +69,32 @@ const Config = (() => {
       const bgImg  = cfg.bgImage || '';
       _applyBgModeToUI(bgMode, bgImg);
 
+      const segSelect = el('controller-seg-engine-select');
+      if (segSelect) {
+        segSelect.value = cfg.segmentationEngine || 'mediapipe';
+        onSegEngineChange(cfg.segmentationEngine || 'mediapipe');
+      }
+
+      // RVM quality slider
+      const rvmRatio = cfg.rvmDownsampleRatio ?? 0.25;
+      const rvmRangeEl = el('rvm-downsample-range');
+      if (rvmRangeEl) rvmRangeEl.value = Math.round(rvmRatio * 100);
+      const rvmValEl = el('rvm-downsample-val');
+      if (rvmValEl) rvmValEl.textContent = rvmRatio.toFixed(2) + '×';
+
+      // Face touch-up
+      const ftEnabled = cfg.faceTouchupEnabled ?? false;
+      const ftCheckbox = el('controller-face-touchup-checkbox');
+      if (ftCheckbox) ftCheckbox.checked = ftEnabled;
+      const ftStrength = cfg.faceTouchupStrength ?? 35;
+      const ftRange = el('face-touchup-strength-range');
+      if (ftRange) ftRange.value = ftStrength;
+      const ftVal = el('face-touchup-strength-val');
+      if (ftVal) ftVal.textContent = ftStrength + '%';
+      _applyFaceTouchupUI(ftEnabled);
+      const ledFt = el('led-face-touchup');
+      if (ledFt) ledFt.classList.toggle('active', ftEnabled);
+
       const zoom = cfg.zoom ?? 1.0;
       if (el('zoom-select')) el('zoom-select').value = zoom;
       if (el('zoom-val'))    el('zoom-val').textContent = parseFloat(zoom).toFixed(1) + 'x';
@@ -474,6 +500,10 @@ const Config = (() => {
       customPets:  _customPets,
       customOnekoEnabled: _customPets[0] ? _customPets[0].enabled : false,
       customOnekoSkin: _customPets[0] ? _customPets[0].skin : 'socks',
+      segmentationEngine: el('controller-seg-engine-select')?.value || 'mediapipe',
+      rvmDownsampleRatio:  parseFloat((parseInt(el('rvm-downsample-range')?.value || 25, 10) / 100).toFixed(2)),
+      faceTouchupEnabled:  el('controller-face-touchup-checkbox')?.checked || false,
+      faceTouchupStrength: parseInt(el('face-touchup-strength-range')?.value || 35, 10),
     };
 
     console.log(
@@ -808,23 +838,98 @@ const Config = (() => {
     closeSkinModal();
   }
 
-  return { 
-    load, 
-    update, 
-    onOrientationChange, 
-    onZoomChange, 
-    onProcessingChange, 
-    resetProcessing, 
-    resetSingle, 
-    updateFromController, 
-    onOrientationChangeFromController, 
-    setBgMode, 
-    loadBackgrounds, 
+  function onSegEngineChange(val) {
+    const select = el('controller-seg-engine-select');
+    if (select) select.value = val;
+
+    const rvmCtrls = el('rvm-controls');
+    if (rvmCtrls) {
+      rvmCtrls.style.display = (val === 'rvm') ? 'flex' : 'none';
+    }
+
+    if (!_loading) {
+      update();
+    }
+  }
+
+  function onRvmQualityChange(rawVal) {
+    const ratio = (parseInt(rawVal, 10) / 100).toFixed(2);
+    const valEl = el('rvm-downsample-val');
+    if (valEl) valEl.textContent = ratio + '×';
+    if (!_loading) update();
+  }
+
+  function _applyFaceTouchupUI(enabled) {
+    const row = el('face-touchup-strength-row');
+    const hint = el('face-touchup-hint');
+    if (row)  row.style.display  = enabled ? 'flex' : 'none';
+    if (hint) hint.style.display = enabled ? 'block' : 'none';
+  }
+
+  function onFaceTouchupChange() {
+    const enabled = el('controller-face-touchup-checkbox')?.checked || false;
+    const strength = parseInt(el('face-touchup-strength-range')?.value || 35, 10);
+    // Update strength label
+    const valEl = el('face-touchup-strength-val');
+    if (valEl) valEl.textContent = strength + '%';
+    // Show/hide strength row
+    _applyFaceTouchupUI(enabled);
+    // Update LED
+    const led = el('led-face-touchup');
+    if (led) led.classList.toggle('active', enabled);
+    if (!_loading) update();
+  }
+
+  async function uploadBackground(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    Toast.show('Uploading custom background...', 'info');
+    try {
+      const res = await fetch(`/api/upload_background?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream'
+        },
+        body: file
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const data = await res.json();
+      if (data.success) {
+        Toast.show('✓ Custom background uploaded successfully!', 'success');
+        await loadBackgrounds(data.filename);
+        update();
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err) {
+      Toast.show(`⚠️ Upload failed: ${err.message}`, 'error');
+    }
+  }
+
+  return {
+    load,
+    update,
+    updateFromController,
+    resetProcessing,
+    resetSingle,
+    onProcessingChange,
+    onOrientationChange,
+    onOrientationChangeFromController,
+    onZoomChange,
+    setBgMode,
+    onSegEngineChange,
+    onRvmQualityChange,
+    onFaceTouchupChange,
+    uploadBackground,
+    loadBackgrounds,
     onOnekoSizeChange,
     addCustomPet,
+    removeCustomPet,
+    openSkinModal,
     closeSkinModal,
     filterSkins,
-    setSkinFilter
+    setSkinFilter,
+    toggleFavoriteSkin: toggleFavorite,
   };
 })();
-

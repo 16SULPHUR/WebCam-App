@@ -16,6 +16,11 @@ Performance improvements over v1:
 import os
 import sys
 
+# Ensure script directory is in path for relative imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.insert(0, script_dir)
+
 # Critical: Redirect standard output at the OS level to stderr
 # This prevents C++ libraries (MediaPipe, TensorFlow Lite, OpenCV) from writing
 # info/warning logs to file descriptor 1 (stdout), which would corrupt the
@@ -68,16 +73,24 @@ oneko_size = 2.0
 custom_oneko_enabled = False
 custom_oneko_skin = "socks"
 custom_pets_config = []
+segmentation_engine = "mediapipe"
+rvm_segmenter = None
+rvm_downsample_ratio = 0.25
+face_touchup_processor = None
+face_touchup_enabled = False
+face_touchup_strength = 0.35
 
 _prev_settings = {}
 
 def log(msg):
     print(msg, file=sys.stderr, flush=True)
 
+
 def load_config(initial=False):
     global WIDTH, HEIGHT, mirror, orientation, zoom, brightness, contrast
     global saturation, sharpness, blur, vcam_enabled, bg_mode, bg_image, oneko_enabled, oneko_size
-    global custom_oneko_enabled, custom_oneko_skin, custom_pets_config, _prev_settings
+    global custom_oneko_enabled, custom_oneko_skin, custom_pets_config, segmentation_engine, _prev_settings
+    global rvm_downsample_ratio, face_touchup_enabled, face_touchup_strength, rvm_segmenter
     try:
         with open(config_path, "r", encoding="utf-8") as fh:
             cfg = json.load(fh)
@@ -106,6 +119,14 @@ def load_config(initial=False):
         oneko_size  = float(cfg.get("onekoSize", 2.0))
         custom_oneko_enabled = cfg.get("customOnekoEnabled", False)
         custom_oneko_skin  = cfg.get("customOnekoSkin", "socks")
+        prev_engine = segmentation_engine
+        segmentation_engine = cfg.get("segmentationEngine", "mediapipe")
+        rvm_downsample_ratio = float(cfg.get("rvmDownsampleRatio", 0.25))
+        face_touchup_enabled = cfg.get("faceTouchupEnabled", False)
+        face_touchup_strength = float(cfg.get("faceTouchupStrength", 35)) / 100.0
+        # Reset RVM recurrent states when engine switches to/from RVM
+        if rvm_segmenter is not None and prev_engine != segmentation_engine:
+            rvm_segmenter.reset_states()
         
         custom_pets_config = cfg.get("customPets", [])
         if not isinstance(custom_pets_config, list):
@@ -123,6 +144,10 @@ def load_config(initial=False):
             "oneko_enabled": oneko_enabled,
             "oneko_size": oneko_size,
             "custom_pets": json.dumps(custom_pets_config),
+            "segmentation_engine": segmentation_engine,
+            "rvm_downsample_ratio": rvm_downsample_ratio,
+            "face_touchup_enabled": face_touchup_enabled,
+            "face_touchup_strength": face_touchup_strength,
         }
 
         if not initial and current_state != _prev_settings:
@@ -150,7 +175,8 @@ segmenter_thread = None
 
 # Shared state for segmentation thread
 seg_input_lock = threading.Lock()
-seg_input_frame = None      # latest frame_rgb resized to MP_W, MP_H
+seg_input_frame = None        # latest frame_rgb resized to MP_W, MP_H (MediaPipe/BgMattingV2)
+seg_input_full_frame = None   # latest full-res frame_rgb (RVM)
 seg_input_w = 0
 seg_input_h = 0
 
@@ -165,64 +191,100 @@ _ema_mask = None   # float32, same shape as processed frame
 _EMA_ALPHA = 0.65  # weight for the new frame's mask (higher = faster tracking, less smoothing)
 
 def segmenter_thread_func():
-    global segmenter, seg_output_mask, _ema_mask
+    global segmenter, rvm_segmenter
+    global seg_output_mask, _ema_mask
     log("[PySender] Segmenter thread active.")
     while running:
-        if segmenter is None:
+        # ── Engine readiness checks ──────────────────────────────────────
+        if segmentation_engine == "mediapipe":
+            if segmenter is None:
+                time.sleep(0.05)
+                continue
+
+        elif segmentation_engine == "rvm":
+            if rvm_segmenter is None:
+                try:
+                    from bridge_py.rvm_matting import RVMSegmenter
+                    rvm_segmenter = RVMSegmenter(downsample_ratio=rvm_downsample_ratio)
+                except Exception as e:
+                    sys.stderr.write(f"[PySender] ERROR loading RVM: {e}\n")
+                    time.sleep(1.0)
+                    continue
+            if rvm_segmenter.model is None:
+                time.sleep(0.1)
+                continue
+        else:
             time.sleep(0.05)
             continue
 
+        # ── Read the correct input queue ─────────────────────────────────
         frame_to_process = None
         target_w, target_h = 0, 0
         with seg_input_lock:
-            if seg_input_frame is not None:
-                frame_to_process = seg_input_frame.copy()
-                target_w = seg_input_w
-                target_h = seg_input_h
-                # Clear the input slot so we don't process the same frame twice
-                globals()['seg_input_frame'] = None
+            if segmentation_engine == "rvm":
+                if seg_input_full_frame is not None:
+                    frame_to_process = seg_input_full_frame.copy()
+                    target_w = seg_input_w
+                    target_h = seg_input_h
+                    globals()['seg_input_full_frame'] = None
+            else:
+                if seg_input_frame is not None:
+                    frame_to_process = seg_input_frame.copy()
+                    target_w = seg_input_w
+                    target_h = seg_input_h
+                    globals()['seg_input_frame'] = None
 
         if frame_to_process is None:
             time.sleep(0.005)
             continue
 
+        # ── Run inference ────────────────────────────────────────────────
         try:
-            results = segmenter.process(frame_to_process)
-            if results.segmentation_mask is not None:
-                mask_small = results.segmentation_mask
+            mask_full = None
+            if segmentation_engine == "mediapipe":
+                results = segmenter.process(frame_to_process)
+                if results.segmentation_mask is not None:
+                    mask_small = results.segmentation_mask
+                    mask_full = cv2.resize(mask_small, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+                    # mediapipe returns [H, W] — already 2D
 
-                # Resize back to target resolution (saves main thread from doing this resize!)
-                mask_full = cv2.resize(mask_small, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+            elif segmentation_engine == "rvm":
+                mask_full = rvm_segmenter.process_frame(frame_to_process, rvm_downsample_ratio)
+                # rvm returns [H, W, 1] — squeeze to 2D
+                if mask_full is not None and mask_full.ndim == 3:
+                    mask_full = mask_full[:, :, 0]
 
-                # EMA temporal smoothing - eliminates flicker and edge jitter
-                if _ema_mask is None or _ema_mask.shape[:2] != (target_h, target_w):
-                    _ema_mask = mask_full.astype(np.float32)
+            if mask_full is not None:
+                # RVM is temporally stable via recurrent states — skip EMA.
+                # MediaPipe is single-frame model — apply EMA.
+                if segmentation_engine == "rvm":
+                    final_mask = mask_full.astype(np.float32)
                 else:
-                    _ema_mask = _EMA_ALPHA * mask_full.astype(np.float32) + (1.0 - _EMA_ALPHA) * _ema_mask
+                    if _ema_mask is None or _ema_mask.shape[:2] != (target_h, target_w):
+                        _ema_mask = mask_full.astype(np.float32)
+                    else:
+                        _ema_mask = (_EMA_ALPHA * mask_full.astype(np.float32)
+                                     + (1.0 - _EMA_ALPHA) * _ema_mask)
+                    final_mask = _ema_mask
 
-                mask_3d = np.stack((_ema_mask,) * 3, axis=-1)
-
+                # Stack to [H, W, 3] for compositing
+                mask_3d = np.stack((final_mask,) * 3, axis=-1)
                 with seg_output_lock:
                     seg_output_mask = mask_3d
+
         except Exception as e:
             sys.stderr.write(f"[PySender] Segmenter thread exception: {e}\n")
             time.sleep(0.02)
 
 
 def load_mediapipe_worker():
-    global segmenter, segmenter_loading, segmenter_thread
+    global segmenter, segmenter_loading
     log("[PySender] Loading MediaPipe Selfie Segmentation (landscape model)...")
     try:
         import mediapipe as mp
         mp_selfie = mp.solutions.selfie_segmentation
-        # model_selection=1 = landscape model (256x144 tensor, fastest for webcam)
         segmenter = mp_selfie.SelfieSegmentation(model_selection=1)
         log("[PySender] MediaPipe Selfie Segmentation loaded successfully.")
-
-        # Start the background segmenter thread
-        segmenter_thread = threading.Thread(target=segmenter_thread_func, name="MpSegmenter", daemon=True)
-        segmenter_thread.start()
-        log("[PySender] Background segmenter thread started.")
     except Exception as exc:
         log(f"[PySender] ERROR loading MediaPipe: {exc}")
     finally:
@@ -549,11 +611,18 @@ def main():
                     skin_name = pet_cfg.get("skin", "socks")
                     custom_animators[idx].preload_custom_skin(skin_name)
 
-            # Lazy-load MediaPipe when any background effect is needed
+            # Lazy-load segmenters when any background effect is needed
             needs_segmentation = bg_mode in ("blur", "replace")
-            if needs_segmentation and segmenter is None and not segmenter_loading:
-                segmenter_loading = True
-                threading.Thread(target=load_mediapipe_worker, name="MpLoader", daemon=True).start()
+            if needs_segmentation:
+                global segmenter_thread
+                if segmenter_thread is None:
+                    segmenter_thread = threading.Thread(target=segmenter_thread_func, name="SegmenterThread", daemon=True)
+                    segmenter_thread.start()
+                    log("[PySender] Background segmenter thread started.")
+                
+                if segmentation_engine == "mediapipe" and segmenter is None and not segmenter_loading:
+                    segmenter_loading = True
+                    threading.Thread(target=load_mediapipe_worker, name="MpLoader", daemon=True).start()
 
             # Read raw BGR24 frame from stdin
             raw = b''
@@ -567,6 +636,7 @@ def main():
 
             try:
                 frame_bgr = np.frombuffer(raw, dtype=np.uint8).reshape((HEIGHT, WIDTH, 3))
+
 
                 # 1. Crop-zoom
                 if zoom > 1.0:
@@ -593,6 +663,7 @@ def main():
 
                 h_rot, w_rot = frame_bgr.shape[:2]
 
+
                 # 4. Brightness / Contrast
                 if abs(brightness) > 0.01 or abs(contrast - 1.0) > 0.01:
                     frame_bgr = apply_color_eq(frame_bgr, brightness, contrast)
@@ -611,14 +682,24 @@ def main():
                 # Convert BGR to RGB for downstream processing
                 frame_rgb = frame_bgr[:, :, ::-1].copy()
 
+
+
                 # 7. Virtual Background (Blur / Replace)
                 if bg_mode in ("blur", "replace"):
-                    # Feed the current frame (resized to 256x144) to the background worker
-                    seg_in = cv2.resize(frame_rgb, (MP_W, MP_H), interpolation=cv2.INTER_LINEAR)
-                    with seg_input_lock:
-                        seg_input_frame = seg_in
-                        seg_input_w = w_rot
-                        seg_input_h = h_rot
+                    # Feed the correct input queue based on the active engine
+                    if segmentation_engine == "rvm":
+                        # RVM operates on full-res RGB — no pre-downscale
+                        with seg_input_lock:
+                            globals()['seg_input_full_frame'] = frame_rgb
+                            globals()['seg_input_w'] = w_rot
+                            globals()['seg_input_h'] = h_rot
+                    else:
+                        # MediaPipe / BgMattingV2: downscale to 256×144 first
+                        seg_in = cv2.resize(frame_rgb, (MP_W, MP_H), interpolation=cv2.INTER_LINEAR)
+                        with seg_input_lock:
+                            globals()['seg_input_frame'] = seg_in
+                            globals()['seg_input_w'] = w_rot
+                            globals()['seg_input_h'] = h_rot
 
                     # Read the latest computed mask from the background thread
                     with seg_output_lock:
@@ -635,6 +716,17 @@ def main():
                             bg_rgb = get_background_rgb(bg_image, w_rot, h_rot)
                             if bg_rgb is not None:
                                 frame_rgb = (frame_rgb * mask_3d + bg_rgb * (1.0 - mask_3d)).astype(np.uint8)
+
+                # 7.7 Face Touch-up (bilateral skin smoothing)
+                if face_touchup_enabled and face_touchup_strength > 0.01:
+                    if face_touchup_processor is None:
+                        try:
+                            from bridge_py.face_touchup import FaceTouchup
+                            globals()['face_touchup_processor'] = FaceTouchup()
+                        except Exception as _e:
+                            log(f"[PySender] ERROR loading FaceTouchup: {_e}")
+                    if face_touchup_processor is not None:
+                        frame_rgb = face_touchup_processor.process_frame(frame_rgb, face_touchup_strength)
 
                 # 7.5 Draw Oneko Pet Overlay
                 if oneko_enabled and oneko_animator is not None:

@@ -117,6 +117,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._handle_record_toggle()
             elif path == "/api/record/snapshot":
                 self._handle_record_snapshot()
+
+            elif path == "/api/upload_background":
+                self._handle_upload_background()
             else:
                 self.send_error(404)
         except Exception as exc:
@@ -335,6 +338,30 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self.broadcaster.broadcast_log("system", f"Snapshot saved -> {path}")
         except Exception as exc:
             self._json({"error": str(exc)}, 500)
+
+
+    def _handle_upload_background(self) -> None:
+        """Accept raw file upload and save it as a background image."""
+        from urllib.parse import parse_qs
+        query = urlparse(self.path).query
+        params = parse_qs(query)
+        filename = params.get("filename", [""])[0]
+        if not filename:
+            self._json({"success": False, "error": "Missing filename parameter"}, 400)
+            return
+        filename = os.path.basename(filename)
+        length = int(self.headers.get("Content-Length", 0))
+        data = self.rfile.read(length)
+        
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        bg_path = os.path.join(base_dir, "windows", "backgrounds", filename)
+        try:
+            with open(bg_path, "wb") as f:
+                f.write(data)
+            self._json({"success": True, "filename": filename})
+            self.broadcaster.broadcast_log("system", f"Uploaded custom background: {filename}")
+        except Exception as e:
+            self._json({"success": False, "error": str(e)}, 500)
 
     # ── Backgrounds ───────────────────────────────────────────────────────────
 

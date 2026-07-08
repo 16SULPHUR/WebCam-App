@@ -237,6 +237,37 @@
         <span class="mech-toggle-label" style="font-size:10px;letter-spacing:0.8px;text-transform:uppercase;color:#9ca3af;">VIRTUAL BG</span>
       </div>
 
+      <!-- Segmentation Engine Row -->
+      <div class="mech-toggle-row select-row" style="margin-top: 4px; margin-bottom: 4px;">
+        <span class="mech-toggle-label">Seg Engine</span>
+        <select id="controller-seg-engine-select" class="ctrl-select ctrl-select-mech" style="background: #1e293b; color: #f3f4f6; border: 1px solid rgba(255,255,255,0.12); padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; font-family: 'Inter', sans-serif; cursor: pointer; outline: none; width: 110px; text-align: center;" onchange="Config.onSegEngineChange(this.value)">
+          <option value="mediapipe" selected>MediaPipe</option>
+          <option value="rvm">RVM ✨</option>
+        </select>
+      </div>
+
+      <!-- RVM controls panel (visible when engine = rvm) -->
+      <div id="rvm-controls" style="display:none; flex-direction: column; gap: 6px; margin-top: 4px; margin-bottom: 8px; background: rgba(99,102,241,0.06); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(99,102,241,0.2);">
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+          <span style="font-size: 10px; font-weight: 700; color: #a5b4fc;">✨ RVM — No Background Ref Needed</span>
+        </div>
+        <div style="font-size: 9px; color: #94a3b8; line-height: 1.4;">
+          Recurrent Video Matting carries temporal state across frames for flicker-free matting. No background capture required.
+        </div>
+        <div class="mech-toggle-row" style="margin-top: 4px;">
+          <span class="mech-toggle-label" style="font-size: 10px;">Quality/Speed</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <input type="range" id="rvm-downsample-range" min="10" max="50" step="5" value="25"
+              style="width:80px; accent-color:#818cf8;"
+              oninput="Config.onRvmQualityChange(this.value)">
+            <span id="rvm-downsample-val" style="font-size:10px;color:#a5b4fc;font-weight:600;min-width:28px;">0.25×</span>
+          </div>
+        </div>
+        <div style="font-size: 8px; color: #64748b; display: flex; justify-content: space-between; padding: 0 2px;">
+          <span>Faster</span><span>Higher Quality</span>
+        </div>
+      </div>
+
       <!-- Mode pills -->
       <div class="mech-toggle-row" style="flex-wrap:wrap;gap:6px;align-items:flex-start;">
         <div class="bg-mode-pills" id="bg-mode-pills" style="flex-wrap:wrap;">
@@ -266,12 +297,46 @@
         <div class="bg-image-grid" id="bg-image-grid" style="grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin-top:4px;">
           <div class="bg-grid-loading">Loading…</div>
         </div>
-        <p style="font-size:10px;color:#6b7280;margin-top:6px;">
-          Add images to <code style="font-size:9px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px;">backgrounds/</code> folder
+        <div style="margin-top: 8px; display: flex; gap: 8px; width: 100%;">
+          <button class="mech-press-btn btn-silver" style="flex: 1; padding: 4px 10px; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px;" onclick="document.getElementById('bg-upload-file-input').click()">
+            <span>Upload Custom BG 📁</span>
+          </button>
+          <input type="file" id="bg-upload-file-input" style="display: none;" accept="image/*" onchange="Config.uploadBackground(event)">
+        </div>
+        <p style="font-size:10px;color:#6b7280;margin-top:6px; text-align: center; width: 100%;">
+          Images saved to <code style="font-size:9px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px;">backgrounds/</code>
         </p>
       </div>
 
-      <!-- Oneko Pet toggle -->
+      <!-- ─── Face Touch-up ──────────────────────────────────────── -->
+      <div class="mech-toggle-row" style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.07);padding-top:10px;">
+        <span class="mech-toggle-label" style="font-size:10px;letter-spacing:0.8px;text-transform:uppercase;color:#9ca3af;">FACE TOUCH-UP</span>
+      </div>
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">Skin Smooth 🪄</span>
+        <div class="mech-toggle-control">
+          <div class="status-led" id="led-face-touchup"></div>
+          <label class="switch-mech">
+            <input type="checkbox" id="controller-face-touchup-checkbox" onchange="Config.onFaceTouchupChange()">
+            <span class="slider-mech"></span>
+          </label>
+        </div>
+      </div>
+      <!-- Strength slider (shown when enabled) -->
+      <div id="face-touchup-strength-row" style="display:none;" class="mech-toggle-row">
+        <span class="mech-toggle-label" style="font-size:10px;">Strength</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input type="range" id="face-touchup-strength-range" min="0" max="100" step="5" value="35"
+            style="width:80px; accent-color:#f472b6;"
+            oninput="Config.onFaceTouchupChange()">
+          <span id="face-touchup-strength-val" style="font-size:10px;color:#f472b6;font-weight:600;min-width:28px;">35%</span>
+        </div>
+      </div>
+      <div id="face-touchup-hint" style="display:none; font-size:9px; color:#6b7280; margin-top:2px; margin-bottom:6px; padding: 4px 6px; background: rgba(244,114,182,0.05); border-radius:4px; border: 1px solid rgba(244,114,182,0.1);">
+        Smooths skin using Face Mesh landmarks. Keeps eyes, lips &amp; eyebrows sharp.
+      </div>
+
+      <!-- ─── Oneko Pet ───────────────────────────────────────────── -->
       <div class="mech-toggle-row">
         <span class="mech-toggle-label">Oneko Pet 🐱</span>
         <div class="mech-toggle-control">

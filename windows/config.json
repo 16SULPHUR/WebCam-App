@@ -12,14 +12,26 @@
   "blur": 25,
   "cameraFacing": "back",
   "bgMode": "none",
-  "bgImage": "city.png",
+  "bgImage": "BG 1.png",
+  "segmentationEngine": "rvm",
+  "rvmDownsampleRatio": 0.5,
+  "faceTouchupEnabled": false,
+  "faceTouchupStrength": 100,
   "onekoEnabled": false,
   "onekoSize": 4,
   "customOnekoEnabled": false,
-  "customOnekoSkin": "socks",
+  "customOnekoSkin": "spooky",
   "customPets": [
     {
-      "skin": "socks",
+      "skin": "spooky",
+      "enabled": false
+    },
+    {
+      "skin": "dave",
+      "enabled": false
+    },
+    {
+      "skin": "jess",
       "enabled": false
     },
     {
