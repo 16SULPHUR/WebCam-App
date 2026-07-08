@@ -884,6 +884,89 @@ const Config = (() => {
     }
 
     if (!_loading) {
+      update();
+    }
+  }
+
+  function onRvmQualityChange(rawVal) {
+    const ratio = (parseInt(rawVal, 10) / 100).toFixed(2);
+    const valEl = el('rvm-downsample-val');
+    if (valEl) valEl.textContent = ratio + '×';
+    if (!_loading) update();
+  }
+
+  function _applyFaceTouchupUI(enabled) {
+    const row = el('face-touchup-strength-row');
+    const hint = el('face-touchup-hint');
+    if (row)  row.style.display  = enabled ? 'flex' : 'none';
+    if (hint) hint.style.display = enabled ? 'block' : 'none';
+  }
+
+  function onFaceTouchupChange() {
+    const enabled = el('controller-face-touchup-checkbox')?.checked || false;
+    const strength = parseInt(el('face-touchup-strength-range')?.value || 35, 10);
+    // Update strength label
+    const valEl = el('face-touchup-strength-val');
+    if (valEl) valEl.textContent = strength + '%';
+    // Show/hide strength row
+    _applyFaceTouchupUI(enabled);
+    // Update LED
+    const led = el('led-face-touchup');
+    if (led) led.classList.toggle('active', enabled);
+    if (!_loading) update();
+  }
+
+  async function captureBackgroundRef() {
+    try {
+      const led = el('led-bg-ref-status');
+      const txt = el('bg-ref-status-text');
+      if (txt) {
+        txt.textContent = 'Capturing...';
+        txt.style.color = '#f59e0b';
+      }
+      if (led) {
+        led.style.backgroundColor = '#f59e0b';
+        led.style.boxShadow = '0 0 6px #f59e0b';
+      }
+      const res = await fetch('/api/capture_bg_ref', { method: 'POST' });
+      if (!res.ok) throw new Error(res.statusText);
+      const data = await res.json();
+      if (data.success) {
+        Toast.show('✓ Background reference capture flagged. Step out of frame!', 'info');
+        setTimeout(updateBgRefIndicator, 2000);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err) {
+      Toast.show(`⚠️ Capture failed: ${err.message}`, 'error');
+      updateBgRefIndicator();
+    }
+  }
+
+  async function uploadBackground(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    Toast.show('Uploading custom background...', 'info');
+    try {
+      const res = await fetch(`/api/upload_background?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream'
+        },
+        body: file
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const data = await res.json();
+      if (data.success) {
+        Toast.show('✓ Custom background uploaded successfully!', 'success');
+        await loadBackgrounds(data.filename);
+        update();
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err) {
+      Toast.show(`⚠️ Upload failed: ${err.message}`, 'error');
     }
   }
 
@@ -896,7 +979,7 @@ const Config = (() => {
     onProcessingChange,
     onOrientationChange,
     onOrientationChangeFromController,
-    onBgModeChange,
+    onZoomChange,
     setBgMode,
     onSegEngineChange,
     onRvmQualityChange,
@@ -904,17 +987,14 @@ const Config = (() => {
     captureBackgroundRef,
     uploadBackground,
     loadBackgrounds,
-    onOnekoChange,
     onOnekoSizeChange,
-    onCustomOnekoChange,
-    onCustomOnekoSkinChange,
     updateBgRefIndicator,
     addCustomPet,
     removeCustomPet,
-    setCustomPetSkin,
-    toggleCustomPetEnabled,
-    setCustomPetTarget,
+    openSkinModal,
+    closeSkinModal,
+    filterSkins,
     setSkinFilter,
-    toggleFavoriteSkin,
+    toggleFavoriteSkin: toggleFavorite,
   };
 })();

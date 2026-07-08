@@ -16,6 +16,11 @@ Performance improvements over v1:
 import os
 import sys
 
+# Ensure script directory is in path for relative imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.insert(0, script_dir)
+
 # Critical: Redirect standard output at the OS level to stderr
 # This prevents C++ libraries (MediaPipe, TensorFlow Lite, OpenCV) from writing
 # info/warning logs to file descriptor 1 (stdout), which would corrupt the
@@ -69,10 +74,6 @@ custom_oneko_enabled = False
 custom_oneko_skin = "socks"
 custom_pets_config = []
 segmentation_engine = "mediapipe"
-matting_segmenter = None
-bgr_ref_img_raw = None
-bgr_ref_img = None
-_logged_ref_warning = False
 rvm_segmenter = None
 rvm_downsample_ratio = 0.25
 face_touchup_processor = None
@@ -84,19 +85,6 @@ _prev_settings = {}
 def log(msg):
     print(msg, file=sys.stderr, flush=True)
 
-def load_bgr_ref():
-    global bgr_ref_img_raw, bgr_ref_img
-    ref_path = os.path.join(os.path.dirname(config_path), "background_ref.png")
-    if os.path.isfile(ref_path):
-        img = cv2.imread(ref_path)
-        if img is not None:
-            bgr_ref_img_raw = img
-            bgr_ref_img = img.copy()
-            log(f"[PySender] Loaded background reference: {ref_path}")
-            return True
-    bgr_ref_img_raw = None
-    bgr_ref_img = None
-    return False
 
 def load_config(initial=False):
     global WIDTH, HEIGHT, mirror, orientation, zoom, brightness, contrast
@@ -203,8 +191,8 @@ _ema_mask = None   # float32, same shape as processed frame
 _EMA_ALPHA = 0.65  # weight for the new frame's mask (higher = faster tracking, less smoothing)
 
 def segmenter_thread_func():
-    global segmenter, matting_segmenter, rvm_segmenter
-    global seg_output_mask, _ema_mask, bgr_ref_img, _logged_ref_warning
+    global segmenter, rvm_segmenter
+    global seg_output_mask, _ema_mask
     log("[PySender] Segmenter thread active.")
     while running:
         # ── Engine readiness checks ──────────────────────────────────────
@@ -212,25 +200,6 @@ def segmenter_thread_func():
             if segmenter is None:
                 time.sleep(0.05)
                 continue
-
-        elif segmentation_engine == "background_matting":
-            if matting_segmenter is None:
-                try:
-                    from bridge_py.bg_matting import BackgroundMattingSegmenter
-                    matting_segmenter = BackgroundMattingSegmenter()
-                except Exception as e:
-                    sys.stderr.write(f"[PySender] ERROR loading bg_matting: {e}\n")
-                    time.sleep(1.0)
-                    continue
-            if bgr_ref_img is None:
-                if not load_bgr_ref():
-                    if not _logged_ref_warning:
-                        log("[PySender] WARNING: BgMattingV2 selected but background_ref.png is missing. "
-                            "Click 'Capture Background Ref' in the control panel.")
-                        _logged_ref_warning = True
-                    time.sleep(0.1)
-                    continue
-            _logged_ref_warning = False
 
         elif segmentation_engine == "rvm":
             if rvm_segmenter is None:
@@ -279,13 +248,6 @@ def segmenter_thread_func():
                     mask_full = cv2.resize(mask_small, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
                     # mediapipe returns [H, W] — already 2D
 
-            elif segmentation_engine == "background_matting":
-                frame_bgr_proc = cv2.cvtColor(frame_to_process, cv2.COLOR_RGB2BGR)
-                mask_full = matting_segmenter.process_frame(frame_bgr_proc, bgr_ref_img)
-                # bg_matting returns [H, W, 1] — squeeze to 2D
-                if mask_full is not None and mask_full.ndim == 3:
-                    mask_full = mask_full[:, :, 0]
-
             elif segmentation_engine == "rvm":
                 mask_full = rvm_segmenter.process_frame(frame_to_process, rvm_downsample_ratio)
                 # rvm returns [H, W, 1] — squeeze to 2D
@@ -294,7 +256,7 @@ def segmenter_thread_func():
 
             if mask_full is not None:
                 # RVM is temporally stable via recurrent states — skip EMA.
-                # MediaPipe and BgMattingV2 are single-frame models — apply EMA.
+                # MediaPipe is single-frame model — apply EMA.
                 if segmentation_engine == "rvm":
                     final_mask = mask_full.astype(np.float32)
                 else:
@@ -675,18 +637,6 @@ def main():
             try:
                 frame_bgr = np.frombuffer(raw, dtype=np.uint8).reshape((HEIGHT, WIDTH, 3))
 
-                # Check if background reference capture was requested (raw untransformed frame)
-                flag_path = os.path.join(os.path.dirname(config_path), ".capture_bg_ref_flag")
-                if os.path.isfile(flag_path):
-                    try:
-                        ref_path = os.path.join(os.path.dirname(config_path), "background_ref.png")
-                        cv2.imwrite(ref_path, frame_bgr)
-                        log(f"[PySender] Captured and saved new RAW background reference to {ref_path}")
-                        if os.path.isfile(flag_path):
-                            os.remove(flag_path)
-                        load_bgr_ref()
-                    except Exception as e:
-                        log(f"[PySender] ERROR capturing background reference: {e}")
 
                 # 1. Crop-zoom
                 if zoom > 1.0:
@@ -713,32 +663,6 @@ def main():
 
                 h_rot, w_rot = frame_bgr.shape[:2]
 
-                # Update the background reference image transforms to match
-                if bgr_ref_img_raw is not None:
-                    # 1. Crop-zoom
-                    if zoom > 1.0:
-                        cx, cy = WIDTH // 2, HEIGHT // 2
-                        cw, ch = int(WIDTH / zoom), int(HEIGHT / zoom)
-                        x1 = max(0, cx - cw // 2)
-                        y1 = max(0, cy - ch // 2)
-                        x2 = min(WIDTH, x1 + cw)
-                        y2 = min(HEIGHT, y1 + ch)
-                        cropped_ref = bgr_ref_img_raw[y1:y2, x1:x2]
-                        bgr_ref_img = cv2.resize(cropped_ref, (w_rot, h_rot), interpolation=cv2.INTER_LINEAR)
-                    else:
-                        bgr_ref_img = cv2.resize(bgr_ref_img_raw, (w_rot, h_rot), interpolation=cv2.INTER_LINEAR)
-
-                    # 2. Mirror
-                    if mirror:
-                        bgr_ref_img = cv2.flip(bgr_ref_img, 1)
-
-                    # 3. Rotation
-                    if orientation == 90:
-                        bgr_ref_img = cv2.rotate(bgr_ref_img, cv2.ROTATE_90_CLOCKWISE)
-                    elif orientation == 180:
-                        bgr_ref_img = cv2.rotate(bgr_ref_img, cv2.ROTATE_180)
-                    elif orientation == 270:
-                        bgr_ref_img = cv2.rotate(bgr_ref_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
                 # 4. Brightness / Contrast
                 if abs(brightness) > 0.01 or abs(contrast - 1.0) > 0.01:

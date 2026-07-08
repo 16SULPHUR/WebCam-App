@@ -12,7 +12,11 @@
   "blur": 25,
   "cameraFacing": "back",
   "bgMode": "replace",
-  "bgImage": "api_test_green.png",
+  "bgImage": "cafe.png",
+  "segmentationEngine": "rvm",
+  "rvmDownsampleRatio": 0.15,
+  "faceTouchupEnabled": false,
+  "faceTouchupStrength": 35,
   "onekoEnabled": false,
   "onekoSize": 4,
   "customOnekoEnabled": false,
@@ -34,9 +38,5 @@
       "skin": "sonic",
       "enabled": false
     }
-  ],
-  "segmentationEngine": "background_matting",
-  "rvmDownsampleRatio": 0.25,
-  "faceTouchupEnabled": false,
-  "faceTouchupStrength": 35
-}
+  ]
+}
