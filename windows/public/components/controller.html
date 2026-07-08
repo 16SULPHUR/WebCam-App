@@ -242,29 +242,8 @@
         <span class="mech-toggle-label">Seg Engine</span>
         <select id="controller-seg-engine-select" class="ctrl-select ctrl-select-mech" style="background: #1e293b; color: #f3f4f6; border: 1px solid rgba(255,255,255,0.12); padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; font-family: 'Inter', sans-serif; cursor: pointer; outline: none; width: 110px; text-align: center;" onchange="Config.onSegEngineChange(this.value)">
           <option value="mediapipe" selected>MediaPipe</option>
-          <option value="background_matting">BgMattingV2</option>
           <option value="rvm">RVM ✨</option>
         </select>
-      </div>
-
-      <!-- Background Reference capturing row (visible when engine = background_matting) -->
-      <div id="bg-matting-controls" style="display:none; flex-direction: column; gap: 6px; margin-top: 4px; margin-bottom: 8px; background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-          <span style="font-size: 10px; font-weight: 600; color: #9ca3af; font-family: 'Inter', sans-serif;">Matting Background Ref</span>
-          <div style="display: flex; align-items: center; gap: 4px;">
-            <div id="led-bg-ref-status" class="status-led" style="background-color: #ef4444; box-shadow: 0 0 6px #ef4444;"></div>
-            <span id="bg-ref-status-text" style="font-size: 9px; color: #ef4444; font-weight: 600;">Missing</span>
-          </div>
-        </div>
-        <button class="mech-press-btn btn-silver" style="width: 100%; padding: 5px 10px; font-size: 10px; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px;" onclick="Config.captureBackgroundRef()">
-          <span>Capture Background Ref 📸</span>
-        </button>
-        <div style="font-size: 9px; color: #9ca3af; line-height: 1.3; margin-top: 4px; padding: 4px 6px; background: rgba(0, 0, 0, 0.2); border-radius: 4px; display: flex; flex-direction: column; gap: 2px;">
-          <span style="color: #f59e0b; font-weight: 700; text-transform: uppercase; font-size: 8px; letter-spacing: 0.5px;">⚠️ CRITICAL FOR HIGHEST QUALITY:</span>
-          <span>1. Step completely out of the camera frame.</span>
-          <span>2. Click the button to record the empty background.</span>
-          <span>3. Step back in. Re-capture if you change camera position/orientation/mirror.</span>
-        </div>
       </div>
 
       <!-- RVM controls panel (visible when engine = rvm) -->

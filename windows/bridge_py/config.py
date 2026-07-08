@@ -29,7 +29,7 @@ _DEFAULTS: dict[str, Any] = {
     "bgMode":      "none", # "none" | "blur" | "replace"
     "bgImage":     "",     # filename within backgrounds/ folder
     # Segmentation
-    "segmentationEngine": "mediapipe",  # "mediapipe" | "background_matting" | "rvm"
+    "segmentationEngine": "mediapipe",  # "mediapipe" | "rvm"
     "rvmDownsampleRatio": 0.25,          # RVM internal compute scale (0.1=fast, 0.5=quality)
     # Face touch-up
     "faceTouchupEnabled":  False,

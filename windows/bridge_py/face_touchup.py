@@ -102,43 +102,74 @@ class FaceTouchup:
 
             lm = results.multi_face_landmarks[0].landmark
 
-            # ── Build skin mask ──────────────────────────────────────────
-            skin_mask = np.zeros((h, w), dtype=np.uint8)
-
-            # Fill the face oval
+            # Calculate face bounding box from outer face oval
             oval = _pts(lm, FACE_OVAL, w, h)
-            hull = cv2.convexHull(oval)
+            x, y, w_box, h_box = cv2.boundingRect(oval)
+
+            # Clip bounds to image dimensions with a safe margin
+            margin = 15
+            x1 = max(0, x - margin)
+            y1 = max(0, y - margin)
+            x2 = min(w, x + w_box + margin)
+            y2 = min(h, y + h_box + margin)
+
+            crop_w = x2 - x1
+            crop_h = y2 - y1
+
+            if crop_w <= 10 or crop_h <= 10:
+                return frame_rgb
+
+            # Crop face region
+            face_crop = frame_rgb[y1:y2, x1:x2]
+
+            # ── Build local skin mask ─────────────────────────────────────
+            skin_mask = np.zeros((crop_h, crop_w), dtype=np.uint8)
+
+            # Fill face oval relative to crop origin
+            oval_rel = oval - np.array([x1, y1])
+            hull = cv2.convexHull(oval_rel)
             cv2.fillConvexPoly(skin_mask, hull, 255)
 
-            # Punch out exclusion zones (eyes, brows, lips, nostrils)
-            excl_kernel = np.ones((7, 7), np.uint8)
+            # Punch out exclusion zones relative to crop origin
+            excl_kernel = np.ones((5, 5), np.uint8)
             for region in (LEFT_EYE, RIGHT_EYE, LEFT_BROW, RIGHT_BROW, LIPS, NOSTRILS):
-                pts = _pts(lm, region, w, h)
-                excl_mask = np.zeros((h, w), dtype=np.uint8)
-                cv2.fillConvexPoly(excl_mask, cv2.convexHull(pts), 255)
-                # Dilate exclusion zones to give a clean boundary
-                excl_mask = cv2.dilate(excl_mask, excl_kernel, iterations=2)
+                pts_rel = _pts(lm, region, w, h) - np.array([x1, y1])
+                excl_mask = np.zeros((crop_h, crop_w), dtype=np.uint8)
+                cv2.fillConvexPoly(excl_mask, cv2.convexHull(pts_rel), 255)
+                excl_mask = cv2.dilate(excl_mask, excl_kernel, iterations=1)
                 skin_mask = cv2.bitwise_and(skin_mask, cv2.bitwise_not(excl_mask))
 
-            # Slightly erode outer edge for a soft boundary
             skin_mask = cv2.erode(skin_mask, np.ones((3, 3), np.uint8), iterations=1)
 
-            # ── Apply bilateral filter (skin-smoothing pass) ──────────────
-            smoothed = cv2.bilateralFilter(frame_rgb, d=9, sigmaColor=75, sigmaSpace=75)
+            # ── Apply bilateral filter on downscaled face crop ────────────
+            # Downscale by 2x to massively speed up bilateral filtering (O(N^2) complexity)
+            small_w = max(4, crop_w // 2)
+            small_h = max(4, crop_h // 2)
+            small_crop = cv2.resize(face_crop, (small_w, small_h), interpolation=cv2.INTER_LINEAR)
+            
+            # Stronger bilateral filter parameters for a distinct, high-quality smooth look
+            smoothed_small = cv2.bilateralFilter(small_crop, d=7, sigmaColor=85, sigmaSpace=85)
+            
+            # Upscale back to cropped resolution
+            smoothed_face = cv2.resize(smoothed_small, (crop_w, crop_h), interpolation=cv2.INTER_LINEAR)
 
-            # ── Soft-edge blend mask ──────────────────────────────────────
-            # Blur the hard mask so the blending has a feathered edge
-            soft_mask = cv2.GaussianBlur(skin_mask.astype(np.float32) / 255.0, (21, 21), 0)
+            # ── Soft-edge blend local mask ────────────────────────────────
+            # Gaussian blur size is scaled down proportionally to the smaller local crop
+            soft_mask = cv2.GaussianBlur(skin_mask.astype(np.float32) / 255.0, (11, 11), 0)
             soft_mask_3d = np.stack([soft_mask] * 3, axis=-1) * float(strength)
 
-            # ── Composite ─────────────────────────────────────────────────
-            result = (
-                frame_rgb.astype(np.float32) * (1.0 - soft_mask_3d)
-                + smoothed.astype(np.float32) * soft_mask_3d
+            # ── Composite face crop ───────────────────────────────────────
+            result_face = (
+                face_crop.astype(np.float32) * (1.0 - soft_mask_3d)
+                + smoothed_face.astype(np.float32) * soft_mask_3d
             ).astype(np.uint8)
 
+            # Paste processed crop back into a copy of the main frame
+            result = frame_rgb.copy()
+            result[y1:y2, x1:x2] = result_face
             return result
 
         except Exception as e:
             sys.stderr.write(f"[FaceTouchup] Error: {e}\n")
             return frame_rgb
+

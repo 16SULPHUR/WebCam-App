@@ -19,10 +19,12 @@ class RVMSegmenter:
     def __init__(self, downsample_ratio: float = 0.25):
         self.model = None
         self.device = None
+        self.use_half = False
         self.rec = [None] * 4          # recurrent states carried across frames
         self.downsample_ratio = downsample_ratio
         self._last_h: int | None = None
         self._last_w: int | None = None
+        self._last_ratio: float | None = None
         self._load_model()
 
     # ------------------------------------------------------------------
@@ -48,11 +50,20 @@ class RVMSegmenter:
                 trust_repo=True,
             )
             if torch.cuda.is_available():
-                model = model.cuda()
                 self.device = torch.device("cuda")
-                sys.stderr.write("[RVM] Model loaded on CUDA GPU.\n")
+                # Try loading in float16 for massive speedup
+                try:
+                    model = model.cuda().half()
+                    self.use_half = True
+                    sys.stderr.write("[RVM] Model loaded on CUDA GPU in float16 (half) mode.\n")
+                except Exception as half_err:
+                    sys.stderr.write(f"[RVM] Float16 conversion failed: {half_err}. Falling back to float32.\n")
+                    model = model.cuda()
+                    self.use_half = False
+                    sys.stderr.write("[RVM] Model loaded on CUDA GPU in float32 mode.\n")
             else:
                 self.device = torch.device("cpu")
+                self.use_half = False
                 sys.stderr.write("[RVM] CUDA not available — running on CPU (slower).\n")
             self.model = model.eval()
         except Exception as e:
@@ -83,28 +94,29 @@ class RVMSegmenter:
         ratio = downsample_ratio if downsample_ratio is not None else self.downsample_ratio
         h, w = frame_rgb.shape[:2]
 
-        # Reset recurrent state if resolution changed (prevents ghosting on resize)
-        if h != self._last_h or w != self._last_w:
+        # Reset recurrent state if resolution or downsample ratio changed
+        if h != self._last_h or w != self._last_w or ratio != self._last_ratio:
             self.reset_states()
             self._last_h = h
             self._last_w = w
+            self._last_ratio = ratio
 
         try:
-            # [1, 3, H, W] float32, normalised to [0, 1]
-            tensor = (
-                torch.from_numpy(frame_rgb)
-                .float()
-                .div(255.0)
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-                .to(self.device)
-            )
+            # Transfer uint8 to GPU first (75% less bandwidth), then convert/normalize on GPU
+            tensor = torch.from_numpy(frame_rgb).to(self.device)
+            if self.use_half:
+                tensor = tensor.half().div(255.0)
+            else:
+                tensor = tensor.float().div(255.0)
+            
+            # [1, 3, H, W]
+            tensor = tensor.permute(2, 0, 1).unsqueeze(0)
 
             with torch.no_grad():
                 fgr, pha, *self.rec = self.model(tensor, *self.rec, ratio)
 
-            # pha: [1, 1, H, W] — squeeze to [H, W]
-            alpha = pha[0, 0].cpu().numpy().astype(np.float32)
+            # pha: [1, 1, H, W] — squeeze to [H, W], convert to float32
+            alpha = pha[0, 0].to(torch.float32).cpu().numpy()
 
             # Feather mask edges to avoid hard "cut-out" look (3 px)
             alpha = cv2.GaussianBlur(alpha, (5, 5), 0)
@@ -114,3 +126,4 @@ class RVMSegmenter:
         except Exception as e:
             sys.stderr.write(f"[RVM] Inference error: {e}\n")
             return None
+

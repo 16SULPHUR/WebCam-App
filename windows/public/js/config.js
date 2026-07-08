@@ -838,49 +838,13 @@ const Config = (() => {
     closeSkinModal();
   }
 
-  async function updateBgRefIndicator() {
-    try {
-      const res = await fetch('/api/status');
-      if (!res.ok) return;
-      const data = await res.json();
-      const hasRef = !!data.hasBgRef;
-      
-      const led = el('led-bg-ref-status');
-      const txt = el('bg-ref-status-text');
-      if (led && txt) {
-        if (hasRef) {
-          led.style.backgroundColor = '#10b981';
-          led.style.boxShadow = '0 0 6px #10b981';
-          txt.textContent = 'Ready';
-          txt.style.color = '#10b981';
-        } else {
-          led.style.backgroundColor = '#ef4444';
-          led.style.boxShadow = '0 0 6px #ef4444';
-          txt.textContent = 'Missing';
-          txt.style.color = '#ef4444';
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
   function onSegEngineChange(val) {
     const select = el('controller-seg-engine-select');
     if (select) select.value = val;
 
-    const mattingCtrls = el('bg-matting-controls');
-    if (mattingCtrls) {
-      mattingCtrls.style.display = (val === 'background_matting') ? 'flex' : 'none';
-    }
-
     const rvmCtrls = el('rvm-controls');
     if (rvmCtrls) {
       rvmCtrls.style.display = (val === 'rvm') ? 'flex' : 'none';
-    }
-
-    if (val === 'background_matting') {
-      updateBgRefIndicator();
     }
 
     if (!_loading) {
@@ -914,33 +878,6 @@ const Config = (() => {
     const led = el('led-face-touchup');
     if (led) led.classList.toggle('active', enabled);
     if (!_loading) update();
-  }
-
-  async function captureBackgroundRef() {
-    try {
-      const led = el('led-bg-ref-status');
-      const txt = el('bg-ref-status-text');
-      if (txt) {
-        txt.textContent = 'Capturing...';
-        txt.style.color = '#f59e0b';
-      }
-      if (led) {
-        led.style.backgroundColor = '#f59e0b';
-        led.style.boxShadow = '0 0 6px #f59e0b';
-      }
-      const res = await fetch('/api/capture_bg_ref', { method: 'POST' });
-      if (!res.ok) throw new Error(res.statusText);
-      const data = await res.json();
-      if (data.success) {
-        Toast.show('✓ Background reference capture flagged. Step out of frame!', 'info');
-        setTimeout(updateBgRefIndicator, 2000);
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (err) {
-      Toast.show(`⚠️ Capture failed: ${err.message}`, 'error');
-      updateBgRefIndicator();
-    }
   }
 
   async function uploadBackground(event) {
@@ -984,11 +921,9 @@ const Config = (() => {
     onSegEngineChange,
     onRvmQualityChange,
     onFaceTouchupChange,
-    captureBackgroundRef,
     uploadBackground,
     loadBackgrounds,
     onOnekoSizeChange,
-    updateBgRefIndicator,
     addCustomPet,
     removeCustomPet,
     openSkinModal,
