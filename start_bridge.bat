@@ -48,7 +48,7 @@ echo.
 
 REM ── Start Python bridge ──────────────────────────────────────────────────────
 echo Starting Python bridge...
-echo Dashboard: http://localhost:3000
+echo Dashboard: http://localhost:5134
 echo.
 cd /d "F:\PROGRAMING\WebCam App\windows"
 "F:\tools\python312\python.exe" -c "import sys, os; sys.path.insert(0, os.getcwd()); import bridge_py.__main__; bridge_py.__main__.main()"

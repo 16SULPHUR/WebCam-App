@@ -82,7 +82,7 @@ def main() -> None:
     tui = TuiManager(broadcaster, config) if use_tui else None
 
     # ── 2. HTTP server ────────────────────────────────────────────────────────
-    server = BridgeServer(config, broadcaster, recorder, PUBLIC_DIR, port=3000)
+    server = BridgeServer(config, broadcaster, recorder, PUBLIC_DIR, port=5134)
 
     # ── 3. Pipeline ───────────────────────────────────────────────────────────
     pipeline = Pipeline(
