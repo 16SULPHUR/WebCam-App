@@ -1,0 +1,72 @@
+<!-- Reaction Overlays — settings dialog -->
+<div class="rx-modal" id="reaction-modal" onclick="if (event.target === this) Reactions.closeDialog()">
+  <div class="rx-dialog">
+
+    <div class="rx-head">
+      <h2>Reaction Overlays 🎭</h2>
+      <label class="rx-switch" title="Enable reaction overlays">
+        <input type="checkbox" id="rx-master-switch" onchange="Reactions.setEnabled(this.checked)">
+        <span></span>
+      </label>
+      <button class="rx-close" onclick="Reactions.closeDialog()" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="rx-body">
+      <div class="rx-section-title">Detection</div>
+      <div class="rx-globals">
+        <div class="rx-field">
+          <label>Detection rate <span class="rx-num" id="rx-fps-val">12 fps</span></label>
+          <input type="range" id="rx-fps" min="4" max="30" step="1" oninput="Reactions.onGlobal('detectionFps', this.value)">
+        </div>
+        <div class="rx-field">
+          <label>Sensitivity <span class="rx-num" id="rx-sens-val">1.00×</span></label>
+          <input type="range" id="rx-sens" min="0.6" max="1.6" step="0.05" oninput="Reactions.onGlobal('sensitivity', this.value)">
+        </div>
+        <div class="rx-field">
+          <label>Hold frames <span class="rx-num" id="rx-hold-val">2</span></label>
+          <input type="range" id="rx-hold" min="1" max="6" step="1" oninput="Reactions.onGlobal('holdFrames', this.value)">
+        </div>
+        <div class="rx-field">
+          <label>Cooldown <span class="rx-num" id="rx-cooldown-val">1800 ms</span></label>
+          <input type="range" id="rx-cooldown" min="200" max="6000" step="100" oninput="Reactions.onGlobal('cooldownMs', this.value)">
+        </div>
+        <div class="rx-field">
+          <label>Max on screen <span class="rx-num" id="rx-max-val">4</span></label>
+          <input type="range" id="rx-max" min="1" max="8" step="1" oninput="Reactions.onGlobal('maxConcurrent', this.value)">
+        </div>
+        <div class="rx-field">
+          <label>Overall size <span class="rx-num" id="rx-scale-val">1.00×</span></label>
+          <input type="range" id="rx-scale" min="0.4" max="2" step="0.05" oninput="Reactions.onGlobal('globalScale', this.value)">
+        </div>
+        <div class="rx-field">
+          <label for="rx-showlabel">Burn trigger name into frame</label>
+          <label class="rx-switch">
+            <input type="checkbox" id="rx-showlabel" onchange="Reactions.onGlobal('showLabel', this.checked)">
+            <span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="rx-section-title">Reactions</div>
+      <div class="rx-toolbar">
+        <button class="rx-btn primary" onclick="Reactions.addMapping()">Add reaction ➕</button>
+        <button class="rx-btn" onclick="document.getElementById('rx-upload-input').click()">Upload artwork 🖼️</button>
+        <button class="rx-btn danger" onclick="Reactions.restoreDefaults()">Restore defaults ↺</button>
+        <input type="file" id="rx-upload-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" onchange="Reactions.uploadAsset(event)">
+      </div>
+
+      <div class="rx-list" id="rx-list"></div>
+
+      <div class="rx-note" id="rx-note"></div>
+
+      <div class="rx-picker" id="rx-picker">
+        <div class="rx-row" style="justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:10px;color:#94a3b8;">Bundled emoji — click to use</span>
+          <button class="rx-icon-btn" onclick="Reactions.closePicker()">&times;</button>
+        </div>
+        <div class="rx-picker-grid" id="rx-picker-grid"></div>
+      </div>
+    </div>
+
+  </div>
+</div>

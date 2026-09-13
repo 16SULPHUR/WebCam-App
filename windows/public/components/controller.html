@@ -336,6 +336,27 @@
         Smooths skin using Face Mesh landmarks. Keeps eyes, lips &amp; eyebrows sharp.
       </div>
 
+      <!-- ─── Reaction Overlays ──────────────────────────────────── -->
+      <div class="mech-toggle-row" style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.07);padding-top:10px;">
+        <span class="mech-toggle-label" style="font-size:10px;letter-spacing:0.8px;text-transform:uppercase;color:#9ca3af;">REACTIONS</span>
+      </div>
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label">Emoji Reactions 🎭</span>
+        <div class="mech-toggle-control">
+          <div class="status-led" id="led-reactions"></div>
+          <label class="switch-mech">
+            <input type="checkbox" id="controller-reactions-checkbox" onchange="Reactions.toggleFromController()">
+            <span class="slider-mech"></span>
+          </label>
+        </div>
+      </div>
+      <div class="mech-toggle-row">
+        <span class="mech-toggle-label" style="font-size:10px;">Gestures &amp; Artwork</span>
+        <div class="mech-toggle-control">
+          <button class="mech-press-btn btn-silver" onclick="Reactions.openDialog()">CONFIG</button>
+        </div>
+      </div>
+
       <!-- ─── Oneko Pet ───────────────────────────────────────────── -->
       <div class="mech-toggle-row">
         <span class="mech-toggle-label">Oneko Pet 🐱</span>

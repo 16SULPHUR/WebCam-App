@@ -38,5 +38,197 @@
       "skin": "sonic",
       "enabled": false
     }
-  ]
+  ],
+  "reactions": {
+    "enabled": false,
+    "detectionFps": 12,
+    "sensitivity": 1.0,
+    "holdFrames": 2,
+    "cooldownMs": 1800,
+    "maxConcurrent": 4,
+    "globalScale": 1.0,
+    "showLabel": false,
+    "mappings": [
+      {
+        "id": "default_thumbs_up",
+        "trigger": "thumbs_up",
+        "enabled": true,
+        "type": "emoji",
+        "value": "👍",
+        "animation": "pop",
+        "placement": "anchor",
+        "size": 0.22,
+        "duration": 1.3,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_thumbs_down",
+        "trigger": "thumbs_down",
+        "enabled": true,
+        "type": "emoji",
+        "value": "👎",
+        "animation": "pop",
+        "placement": "anchor",
+        "size": 0.22,
+        "duration": 1.3,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_victory",
+        "trigger": "victory",
+        "enabled": true,
+        "type": "emoji",
+        "value": "✌",
+        "animation": "float_up",
+        "placement": "anchor",
+        "size": 0.2,
+        "duration": 1.6,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_open_palm",
+        "trigger": "open_palm",
+        "enabled": true,
+        "type": "emoji",
+        "value": "👋",
+        "animation": "shake",
+        "placement": "anchor",
+        "size": 0.22,
+        "duration": 1.4,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_fist",
+        "trigger": "fist",
+        "enabled": true,
+        "type": "emoji",
+        "value": "✊",
+        "animation": "pulse",
+        "placement": "anchor",
+        "size": 0.2,
+        "duration": 1.3,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_ok_sign",
+        "trigger": "ok_sign",
+        "enabled": true,
+        "type": "emoji",
+        "value": "👌",
+        "animation": "pop",
+        "placement": "anchor",
+        "size": 0.2,
+        "duration": 1.3,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_rock_on",
+        "trigger": "rock_on",
+        "enabled": true,
+        "type": "emoji",
+        "value": "🤘",
+        "animation": "burst",
+        "placement": "anchor",
+        "size": 0.16,
+        "duration": 1.6,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_call_me",
+        "trigger": "call_me",
+        "enabled": true,
+        "type": "emoji",
+        "value": "🤙",
+        "animation": "float_up",
+        "placement": "anchor",
+        "size": 0.2,
+        "duration": 1.5,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_point_up",
+        "trigger": "point_up",
+        "enabled": true,
+        "type": "emoji",
+        "value": "☝",
+        "animation": "float_up",
+        "placement": "anchor",
+        "size": 0.18,
+        "duration": 1.5,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_heart_hands",
+        "trigger": "heart_hands",
+        "enabled": true,
+        "type": "emoji",
+        "value": "❤",
+        "animation": "burst",
+        "placement": "anchor",
+        "size": 0.16,
+        "duration": 1.8,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_both_hands_up",
+        "trigger": "both_hands_up",
+        "enabled": true,
+        "type": "emoji",
+        "value": "🎉",
+        "animation": "confetti",
+        "placement": "center",
+        "size": 0.16,
+        "duration": 2.4,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_smile",
+        "trigger": "smile",
+        "enabled": true,
+        "type": "emoji",
+        "value": "😄",
+        "animation": "pop",
+        "placement": "anchor",
+        "size": 0.2,
+        "duration": 1.4,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_mouth_open",
+        "trigger": "mouth_open",
+        "enabled": true,
+        "type": "emoji",
+        "value": "😮",
+        "animation": "pop",
+        "placement": "anchor",
+        "size": 0.2,
+        "duration": 1.4,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_wink",
+        "trigger": "wink",
+        "enabled": false,
+        "type": "emoji",
+        "value": "😉",
+        "animation": "pop",
+        "placement": "anchor",
+        "size": 0.18,
+        "duration": 1.2,
+        "cooldownMs": null
+      },
+      {
+        "id": "default_brow_raise",
+        "trigger": "brow_raise",
+        "enabled": false,
+        "type": "emoji",
+        "value": "🤨",
+        "animation": "slide_up",
+        "placement": "anchor",
+        "size": 0.18,
+        "duration": 1.2,
+        "cooldownMs": null
+      }
+    ]
+  }
 }

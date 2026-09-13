@@ -52,6 +52,7 @@ const Toast = {
 
   // ── Initialise Application State & Listeners ───────────────────────────────
   function initializeApp() {
+    Reactions.init();
     Config.load();
 
     // ── SSE Log Stream ──────────────────────────────────────────────────────────

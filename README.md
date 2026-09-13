@@ -34,6 +34,8 @@ Android Phone                        Windows PC
 | FFmpeg (on PATH) | https://ffmpeg.org/download.html — add `bin/` to system PATH |
 | Python 3.8+ | https://python.org |
 | pyvirtualcam | `pip install pyvirtualcam` |
+| MediaPipe (backgrounds, touch-up, reactions) | `pip install mediapipe` |
+| Pillow (custom reaction emoji — optional) | `pip install pillow` |
 | OBS Studio + Virtual Camera | https://obsproject.com — OBS must be running with Virtual Camera **started** |
 | ADB (Android Platform Tools) | https://developer.android.com/studio/releases/platform-tools |
 
@@ -64,6 +66,19 @@ npm start
 In Zoom / Teams / OBS, select **"OBS Virtual Camera"** as your video input device.
 
 ---
+
+## Reaction Overlays 🎭
+
+Throw a thumbs-up, a peace sign, heart-hands or a big smile at the camera and the
+matching emoji (or your own meme) animates onto the stream — virtual camera
+included. Off by default; everything lives behind **Controller → REACTIONS →
+CONFIG** in the dashboard: master switch, detection tuning, and the full list of
+gesture → artwork mappings.
+
+Bundled triggers: thumbs up/down, peace, wave, fist, OK, rock horns, shaka,
+pointing up, heart hands, both hands up, smile, surprise, wink, eyebrow raise.
+Add your own gestures, animations and artwork — see
+[`windows/reactions/README.md`](windows/reactions/README.md).
 
 ## Folder Structure
 ```

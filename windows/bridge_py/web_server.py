@@ -50,6 +50,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
     recorder:      RecordingManager   = None   # type: ignore[assignment]
     public_dir:    str                = ""
     backgrounds_dir: str              = ""     # absolute path to backgrounds/ folder
+    reactions_dir: str                = ""     # absolute path to reactions/assets/ folder
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
@@ -83,6 +84,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._handle_serve_background(path)
             elif path.startswith("/skins/"):
                 self._handle_serve_skin(path)
+            elif path == "/api/reactions/catalog":
+                self._handle_reactions_catalog()
+            elif path.startswith("/reactions/assets/"):
+                self._handle_serve_reaction_asset(path)
             elif path.startswith("/video_feed"):
                 self._handle_video()
             elif path == "/logs":
@@ -120,6 +125,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
             elif path == "/api/upload_background":
                 self._handle_upload_background()
+            elif path == "/api/reactions/upload":
+                self._handle_upload_reaction_asset()
+            elif path == "/api/reactions/preview":
+                self._handle_reaction_preview()
             else:
                 self.send_error(404)
         except Exception as exc:
@@ -363,6 +372,65 @@ class BridgeHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json({"success": False, "error": str(e)}, 500)
 
+    # ── Reaction overlays ─────────────────────────────────────────────────────
+
+    def _handle_reactions_catalog(self) -> None:
+        """Triggers, animations, placements, artwork — everything the dialog needs."""
+        from .reactions import catalog_payload
+        payload = catalog_payload(self.reactions_dir)
+        payload["config"] = self.config.get("reactions", {})
+        self._json(payload)
+
+    def _handle_serve_reaction_asset(self, path: str) -> None:
+        rel = path[len("/reactions/assets/"):]
+        abs_path = os.path.realpath(os.path.join(self.reactions_dir, rel))
+        if not abs_path.startswith(os.path.realpath(self.reactions_dir)) or not os.path.isfile(abs_path):
+            self.send_error(404)
+            return
+        mime, _ = mimetypes.guess_type(abs_path)
+        with open(abs_path, "rb") as fh:
+            data = fh.read()
+        self.send_response(200)
+        self.send_header("Content-Type", mime or "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "max-age=3600")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _handle_upload_reaction_asset(self) -> None:
+        """Accept a raw image upload and store it as reaction artwork."""
+        from urllib.parse import parse_qs
+        params = parse_qs(urlparse(self.path).query)
+        filename = os.path.basename(params.get("filename", [""])[0])
+        ext = os.path.splitext(filename)[1].lower()
+        if not filename or ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+            self._json({"success": False, "error": "Unsupported or missing filename"}, 400)
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        data = self.rfile.read(length)
+        try:
+            os.makedirs(self.reactions_dir, exist_ok=True)
+            with open(os.path.join(self.reactions_dir, filename), "wb") as fh:
+                fh.write(data)
+            self._json({"success": True, "filename": filename})
+            self.broadcaster.broadcast_log("system", f"Uploaded reaction artwork: {filename}")
+        except Exception as exc:
+            self._json({"success": False, "error": str(exc)}, 500)
+
+    def _handle_reaction_preview(self) -> None:
+        """Fire one overlay into the live frame without performing the gesture."""
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            mapping = json.loads(self.rfile.read(length)) if length else {}
+        except Exception as exc:
+            self._json({"success": False, "error": str(exc)}, 400)
+            return
+        reactions = dict(self.config.get("reactions", {}) or {})
+        reactions["testFire"] = {"ts": time.time(), "mapping": mapping}
+        self.config.update({"reactions": reactions})
+        self._json({"success": True})
+
     # ── Backgrounds ───────────────────────────────────────────────────────────
 
     def _handle_list_backgrounds(self) -> None:
@@ -489,6 +557,9 @@ class BridgeServer:
         # Backgrounds folder sits next to public_dir (i.e. windows/backgrounds/)
         BridgeHandler.backgrounds_dir = os.path.realpath(
             os.path.join(os.path.dirname(public_dir), "backgrounds")
+        )
+        BridgeHandler.reactions_dir = os.path.realpath(
+            os.path.join(os.path.dirname(public_dir), "reactions", "assets")
         )
 
     def set_pipeline(self, pipeline) -> None:
