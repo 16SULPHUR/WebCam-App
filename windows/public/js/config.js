@@ -102,6 +102,9 @@ const Config = (() => {
       // Video processing controls
       _applyProcessingToUI(cfg);
 
+      // Reaction overlays (owns its own slice of the config)
+      if (typeof Reactions !== 'undefined') Reactions.applyFromConfig(cfg);
+
       // Apply orientation (server-side now, no CSS)
       Stream.setOrientation(cfg.orientation || 0);
 
@@ -504,6 +507,7 @@ const Config = (() => {
       rvmDownsampleRatio:  parseFloat((parseInt(el('rvm-downsample-range')?.value || 25, 10) / 100).toFixed(2)),
       faceTouchupEnabled:  el('controller-face-touchup-checkbox')?.checked || false,
       faceTouchupStrength: parseInt(el('face-touchup-strength-range')?.value || 35, 10),
+      reactions:   (typeof Reactions !== 'undefined') ? Reactions.getConfig() : undefined,
     };
 
     console.log(

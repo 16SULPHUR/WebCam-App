@@ -5,10 +5,13 @@ Loads/saves config.json. Provides defaults including the new
 video-processing fields (brightness, contrast, saturation, sharpness, targetFps).
 """
 
+import copy
 import json
 import os
 import threading
 from typing import Any
+
+from .reactions.catalog import default_config as _default_reactions
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 _DEFAULTS: dict[str, Any] = {
@@ -34,6 +37,8 @@ _DEFAULTS: dict[str, Any] = {
     # Face touch-up
     "faceTouchupEnabled":  False,
     "faceTouchupStrength": 35,           # 0–100 (percentage)
+    # Reaction overlays — see bridge_py/reactions/
+    "reactions": _default_reactions(),
 }
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -44,7 +49,7 @@ class ConfigManager:
     def __init__(self, path: str) -> None:
         self._path  = path
         self._lock  = threading.RLock()
-        self._data: dict[str, Any] = dict(_DEFAULTS)
+        self._data: dict[str, Any] = copy.deepcopy(_DEFAULTS)
         self._load()
 
     # ── Private ──────────────────────────────────────────────────────────────

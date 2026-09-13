@@ -52,6 +52,8 @@ if len(sys.argv) < 2:
 config_path = sys.argv[1]
 # backgrounds/ folder sits next to the config file (i.e. windows/backgrounds/)
 BACKGROUNDS_DIR = os.path.join(os.path.dirname(config_path), "backgrounds")
+# reactions/assets/ holds the emoji + meme artwork for the reaction overlay feature
+REACTIONS_ASSETS_DIR = os.path.join(os.path.dirname(config_path), "reactions", "assets")
 
 # Dynamic settings (default values)
 WIDTH = 1280
@@ -79,6 +81,8 @@ rvm_downsample_ratio = 0.25
 face_touchup_processor = None
 face_touchup_enabled = False
 face_touchup_strength = 0.35
+reactions_cfg = {}
+reaction_engine = None
 
 _prev_settings = {}
 
@@ -91,6 +95,7 @@ def load_config(initial=False):
     global saturation, sharpness, blur, vcam_enabled, bg_mode, bg_image, oneko_enabled, oneko_size
     global custom_oneko_enabled, custom_oneko_skin, custom_pets_config, segmentation_engine, _prev_settings
     global rvm_downsample_ratio, face_touchup_enabled, face_touchup_strength, rvm_segmenter
+    global reactions_cfg
     try:
         with open(config_path, "r", encoding="utf-8") as fh:
             cfg = json.load(fh)
@@ -124,6 +129,7 @@ def load_config(initial=False):
         rvm_downsample_ratio = float(cfg.get("rvmDownsampleRatio", 0.25))
         face_touchup_enabled = cfg.get("faceTouchupEnabled", False)
         face_touchup_strength = float(cfg.get("faceTouchupStrength", 35)) / 100.0
+        reactions_cfg = cfg.get("reactions") or {}
         # Reset RVM recurrent states when engine switches to/from RVM
         if rvm_segmenter is not None and prev_engine != segmentation_engine:
             rvm_segmenter.reset_states()
@@ -148,6 +154,7 @@ def load_config(initial=False):
             "rvm_downsample_ratio": rvm_downsample_ratio,
             "face_touchup_enabled": face_touchup_enabled,
             "face_touchup_strength": face_touchup_strength,
+            "reactions": json.dumps(reactions_cfg, sort_keys=True),
         }
 
         if not initial and current_state != _prev_settings:
@@ -579,6 +586,24 @@ class OnekoAnimator:
 
 
 
+def sync_reaction_engine():
+    """Create / reconfigure / stop the reaction overlay engine after a config poll."""
+    global reaction_engine
+    if not (reactions_cfg.get("enabled") or reactions_cfg.get("testFire")):
+        if reaction_engine is not None:
+            reaction_engine.configure(reactions_cfg)
+        return
+    if reaction_engine is None:
+        try:
+            from bridge_py.reactions import ReactionEngine
+            reaction_engine = ReactionEngine(REACTIONS_ASSETS_DIR)
+            log("[PySender] Reaction overlays enabled.")
+        except Exception as exc:
+            log(f"[PySender] ERROR loading reaction overlays: {exc}")
+            return
+    reaction_engine.configure(reactions_cfg)
+
+
 def main():
     global py_cam, running, segmenter_loading, seg_input_frame, seg_input_w, seg_input_h
     log(f"[PySender] Starting Python frame_sender: {WIDTH}x{HEIGHT} @ {FPS}fps")
@@ -595,6 +620,7 @@ def main():
             # Poll configuration changes every 10 frames (~300ms at 30fps)
             if frames_processed % 10 == 0:
                 load_config(initial=False)
+                sync_reaction_engine()
                 
                 # Sync animators count with customPets config list
                 while len(custom_animators) < len(custom_pets_config):
@@ -734,6 +760,12 @@ def main():
                 for idx, pet_cfg in enumerate(custom_pets_config):
                     if pet_cfg.get("enabled", False) and idx < len(custom_animators):
                         custom_animators[idx].draw(frame_rgb, oneko_size)
+
+                # 7.9 Reaction overlays (gesture / expression driven emoji & memes)
+                if reaction_engine is not None:
+                    if reactions_cfg.get("enabled"):
+                        reaction_engine.submit(frame_rgb)
+                    reaction_engine.render(frame_rgb)
 
                 # 8. Send to Virtual Camera
                 if vcam_enabled:
