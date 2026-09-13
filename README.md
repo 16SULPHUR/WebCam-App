@@ -62,7 +62,11 @@ npm install
 npm start
 ```
 
-### Step 4 — Use the Virtual Camera
+### Step 4 — Open the Dashboard
+The bridge serves its control panel at **http://localhost:5134** — live preview,
+camera settings, virtual background, effects, reactions and a log stream.
+
+### Step 5 — Use the Virtual Camera
 In Zoom / Teams / OBS, select **"OBS Virtual Camera"** as your video input device.
 
 ---
@@ -71,9 +75,9 @@ In Zoom / Teams / OBS, select **"OBS Virtual Camera"** as your video input devic
 
 Throw a thumbs-up, a peace sign, heart-hands or a big smile at the camera and the
 matching emoji (or your own meme) animates onto the stream — virtual camera
-included. Off by default; everything lives behind **Controller → REACTIONS →
-CONFIG** in the dashboard: master switch, detection tuning, and the full list of
-gesture → artwork mappings.
+included. Off by default; everything lives on the dashboard's **Reactions** page:
+master switch, detection tuning, a live tracking overlay for debugging, and the
+full list of gesture → artwork mappings.
 
 Bundled triggers: thumbs up/down, peace, wave, fist, OK, rock horns, shaka,
 pointing up, heart hands, both hands up, smile, surprise, wink, eyebrow raise.

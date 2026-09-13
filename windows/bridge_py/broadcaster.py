@@ -64,6 +64,7 @@ class EventBroadcaster:
             "vcamActive":        False,
             "bitrateKBs":        0.0,
             "recording":         False,
+            "reactions":         {},
             # Phone stats (populated by PhoneStatsCollector)
             "phoneModel":          None,
             "phoneAndroidVersion": None,

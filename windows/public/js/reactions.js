@@ -1,9 +1,10 @@
 /**
- * reactions.js — Reaction overlay settings module.
+ * reactions.js — Reaction overlay feature module.
  *
- * Owns the whole feature config (config.json → "reactions"): the master switch,
- * detection tuning, and the trigger → artwork mappings. Config.update() picks the
- * object up via Reactions.getConfig(), so saving follows the normal dashboard path.
+ * Owns the whole feature config (config.json → "reactions"): master switch,
+ * tracking overlay, detection tuning and the trigger → artwork mappings, all
+ * surfaced on the Reactions page. Config.update() picks the object up via
+ * Reactions.getConfig(), so saving follows the normal dashboard path.
  */
 const Reactions = (() => {
   const DEFAULTS = {
@@ -15,6 +16,7 @@ const Reactions = (() => {
     maxConcurrent: 4,
     globalScale: 1.0,
     showLabel: false,
+    showTracking: false,
     mappings: [],
   };
 
@@ -92,13 +94,15 @@ const Reactions = (() => {
   // ── Master switch (dialog + controller panel stay in sync) ───────────────
 
   function syncSwitches() {
-    const on = !!_cfg.enabled;
-    const master = el('rx-master-switch');
-    if (master) master.checked = on;
-    const ctrl = el('controller-reactions-checkbox');
-    if (ctrl) ctrl.checked = on;
-    const led = el('led-reactions');
-    if (led) led.classList.toggle('active', on);
+    ['rx-master', 'rx-quick-toggle'].forEach(id => {
+      const node = el(id);
+      if (node) node.checked = !!_cfg.enabled;
+    });
+    ['rx-tracking', 'rx-quick-tracking'].forEach(id => {
+      const node = el(id);
+      if (node) node.checked = !!_cfg.showTracking;
+    });
+    if (typeof App !== 'undefined') App.markNav();
   }
 
   function setEnabled(on) {
@@ -107,27 +111,34 @@ const Reactions = (() => {
     save();
   }
 
-  function toggleFromController() {
-    const ctrl = el('controller-reactions-checkbox');
-    setEnabled(ctrl ? ctrl.checked : false);
+  function setTracking(on) {
+    _cfg.showTracking = !!on;
+    syncSwitches();
+    if (on && !_cfg.enabled) {
+      Toast.show('Tracking shown on the preview only — reactions are still off.', 'info');
+    }
+    save();
   }
 
-  // ── Dialog ───────────────────────────────────────────────────────────────
+  /** Live detector readout, fed by the SSE status channel. */
+  function applyStats(rx) {
+    if (!rx) return;
+    const set = (id, value) => { const n = el(id); if (n) n.textContent = value; };
+    set('rx-live-hands', rx.hands ?? 0);
+    set('rx-live-faces', rx.faces ?? 0);
+    set('rx-live-fps', rx.detectorFps ?? 0);
+    set('rx-live-overlays', rx.overlays ?? 0);
+    set('rx-live-match', (rx.matched && rx.matched.length) ? rx.matched.join(', ') : '—');
+  }
 
-  async function openDialog() {
-    const modal = el('reaction-modal');
-    if (!modal) return;
+  // ── Page ─────────────────────────────────────────────────────────────────
+
+  async function openSettings() {
+    if (typeof App !== 'undefined') App.navigate('reactions');
     await loadCatalog();
     syncSwitches();
     renderGlobals();
     renderList();
-    modal.classList.add('open');
-  }
-
-  function closeDialog() {
-    const modal = el('reaction-modal');
-    if (modal) modal.classList.remove('open');
-    closePicker();
   }
 
   // ── Global settings ──────────────────────────────────────────────────────
@@ -210,28 +221,28 @@ const Reactions = (() => {
     const warn = warningFor(m);
 
     const valueField = m.type === 'image'
-      ? `<select class="rx-select" data-k="value" style="flex:1 1 140px">
+      ? `<select class="rx-select" data-k="value" style="flex:1 1 140px;max-width:230px">
            <option value="">— choose artwork —</option>${images}
          </select>`
       : `<input class="rx-input emoji" data-k="value" maxlength="8" value="${esc(m.value)}" title="Any emoji">
-         <button class="rx-icon-btn" data-act="pick" title="Pick a bundled emoji">😀</button>`;
+         <button class="btn icon sm" data-act="pick" title="Pick a bundled emoji">😀</button>`;
 
     return `
       <div class="rx-card${m.enabled ? '' : ' off'}" data-i="${i}">
         <div class="rx-row">
-          <label class="rx-switch" title="Enable this reaction">
-            <input type="checkbox" data-k="enabled"${m.enabled ? ' checked' : ''}><span></span>
+          <label class="switch" title="Enable this reaction">
+            <input type="checkbox" data-k="enabled"${m.enabled ? ' checked' : ''}><i></i>
           </label>
           <div class="rx-art">${artHtml(m)}</div>
-          <select class="rx-select" data-k="trigger" style="flex:1 1 150px">${triggers}</select>
+          <select class="rx-select" data-k="trigger" style="flex:1 1 150px;max-width:230px">${triggers}</select>
           <span class="rx-kind ${badge.cls}">${badge.label}</span>
-          <select class="rx-select" data-k="type" style="flex:0 0 86px">
+          <select class="rx-select" data-k="type" style="flex:0 0 78px">
             <option value="emoji"${m.type === 'emoji' ? ' selected' : ''}>Emoji</option>
             <option value="image"${m.type === 'image' ? ' selected' : ''}>Image</option>
           </select>
           ${valueField}
-          <button class="rx-icon-btn" data-act="preview" title="Preview on the live feed">▶</button>
-          <button class="rx-icon-btn" data-act="delete" title="Remove">🗑</button>
+          <button class="btn icon sm" data-act="preview" title="Preview on the live feed">▶</button>
+          <button class="btn icon sm" data-act="delete" title="Remove">🗑</button>
         </div>
         <div class="rx-row wrap-grid">
           <div class="rx-field">
@@ -442,9 +453,6 @@ const Reactions = (() => {
   // ── Init ─────────────────────────────────────────────────────────────────
 
   function init() {
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeDialog();
-    });
     loadCatalog();
   }
 
@@ -452,10 +460,10 @@ const Reactions = (() => {
     init,
     applyFromConfig,
     getConfig,
-    openDialog,
-    closeDialog,
+    applyStats,
+    openSettings,
     setEnabled,
-    toggleFromController,
+    setTracking,
     onGlobal,
     addMapping,
     removeMapping,

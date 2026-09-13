@@ -54,6 +54,7 @@ config_path = sys.argv[1]
 BACKGROUNDS_DIR = os.path.join(os.path.dirname(config_path), "backgrounds")
 # reactions/assets/ holds the emoji + meme artwork for the reaction overlay feature
 REACTIONS_ASSETS_DIR = os.path.join(os.path.dirname(config_path), "reactions", "assets")
+RX_STATUS_PREFIX = "@@RX "
 
 # Dynamic settings (default values)
 WIDTH = 1280
@@ -589,7 +590,8 @@ class OnekoAnimator:
 def sync_reaction_engine():
     """Create / reconfigure / stop the reaction overlay engine after a config poll."""
     global reaction_engine
-    if not (reactions_cfg.get("enabled") or reactions_cfg.get("testFire")):
+    if not (reactions_cfg.get("enabled") or reactions_cfg.get("testFire")
+            or reactions_cfg.get("showTracking")):
         if reaction_engine is not None:
             reaction_engine.configure(reactions_cfg)
         return
@@ -819,6 +821,12 @@ def main():
                 preview_h = (preview_h // 2) * 2
 
                 preview_frame = cv2.resize(frame_rgb, (preview_w, preview_h), interpolation=cv2.INTER_LINEAR)
+
+                # Tracking overlay goes on the dashboard preview only — never on
+                # the virtual camera, so calls stay clean while you tune gestures.
+                if reaction_engine is not None and reactions_cfg.get("showTracking"):
+                    reaction_engine.draw_tracking(preview_frame)
+
                 preview_frame_bgr = preview_frame[:, :, ::-1]
                 _, jpeg_bytes_arr = cv2.imencode('.jpg', preview_frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 jpeg_bytes = jpeg_bytes_arr.tobytes()
@@ -832,6 +840,9 @@ def main():
                     log(f"[PySender] Frame processing loop exception: {e}")
 
             frames_processed += 1
+            if frames_processed % 15 == 0 and reaction_engine is not None:
+                # Structured status line — the bridge parses this out of stderr
+                log(f"{RX_STATUS_PREFIX}{json.dumps(reaction_engine.stats())}")
             if frames_processed % 90 == 0:
                 log(f"[PySender] Processed frame #{frames_processed}")
 

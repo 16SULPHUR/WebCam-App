@@ -1,438 +1,307 @@
 /**
- * stream.js — Video feed, SSE status, FPS tracking, orientation CSS,
- *             snapshot, fullscreen, PiP, recording, sparkline chart.
+ * stream.js — Live preview, status handling, recording, snapshot,
+ *             fullscreen, picture-in-picture and the FPS sparkline.
  */
 const Stream = (() => {
-  const el = {
-    statusDot:     () => document.getElementById('status-dot'),
-    statusText:    () => document.getElementById('status-text'),
-    feedImg:       () => document.getElementById('feed-img'),
-    feedWrapper:   () => document.getElementById('feed-img-wrapper'),
-    feedPH:        () => document.getElementById('feed-placeholder'),
-    feedOverlay:   () => document.getElementById('feed-overlay'),
-    overlayFps:    () => document.getElementById('overlay-fps'),
-    feedBadge:     () => document.getElementById('feed-badge'),
-    feedContainer: () => {
-      if (document.body.classList.contains('controller-mode-active')) {
-        return document.getElementById('controller-preview-box');
-      }
-      return document.getElementById('feed-container');
-    },
-    hdrH264:       () => document.getElementById('hdr-h264'),
-    hdrFrames:     () => document.getElementById('hdr-frames'),
-    hdrFps:        () => document.getElementById('hdr-fps'),
-    healthSignal:  () => document.getElementById('health-signal'),
-    healthBitrate: () => document.getElementById('health-bitrate'),
-    healthVcam:    () => document.getElementById('health-vcam'),
-    healthRec:     () => document.getElementById('health-rec'),
-    recIndicator:  () => document.getElementById('rec-indicator'),
-    btnRecord:     () => document.getElementById('btn-record'),
-    recordDot:     () => document.getElementById('record-dot'),
-    recordLabel:   () => document.getElementById('record-label'),
-    sparkline:     () => document.getElementById('fps-sparkline'),
-    // Phone stats elements
-    phoneModel:    () => document.getElementById('phone-model'),
-    phoneBattery:  () => document.getElementById('phone-battery'),
-    phoneBatteryBar: () => document.getElementById('phone-battery-bar'),
-    phoneTemp:     () => document.getElementById('phone-temp'),
-    phoneUptime:   () => document.getElementById('phone-uptime'),
-    phoneVersion:  () => document.getElementById('phone-version'),
-    phoneBatteryIcon: () => document.getElementById('phone-battery-icon'),
-  };
+  const el = (id) => document.getElementById(id);
 
-  let prevDecodedFrames = 0;
-  let prevTimestamp = Date.now();
+  let prevFrames = null;
+  let prevStamp = Date.now();
   let fpsHistory = [];
-  let isFullscreen = false;
   let isRecording = false;
-  let currentOrientation = 0;
-  let wasAndroidConnected = false;
-  let _feedReloadTimer = null;   // periodic keepalive timer
-  let _feedRetryTimer = null;    // retry-on-error timer
+  let wasConnected = false;
+  let keepalive = null;
+  let retry = null;
+
+  // ── Feed ─────────────────────────────────────────────────────────────────
+
+  function reloadFeed() {
+    const img = el('feed-img');
+    if (img) img.src = '/video_feed?' + Date.now();
+  }
+
+  function startKeepalive() {
+    stopKeepalive();
+    keepalive = setInterval(reloadFeed, 30000);
+  }
+
+  function stopKeepalive() {
+    if (keepalive) { clearInterval(keepalive); keepalive = null; }
+    if (retry) { clearTimeout(retry); retry = null; }
+  }
+
+  function setOrientation() {
+    // Rotation happens server-side; nothing to do in CSS.
+  }
+
+  function setResolution(res) {
+    const out = el('stat-res');
+    if (out) out.textContent = (!res || res === 'auto') ? '1280×720' : res.replace('x', '×');
+  }
+
+  // ── Status ───────────────────────────────────────────────────────────────
+
+  function setStatus(state, text) {
+    const dot = el('status-dot');
+    const label = el('status-text');
+    if (dot) dot.className = 'dot ' + state;
+    if (label) label.textContent = text;
+  }
+
+  function handleStatus(data) {
+    const connected = !!data.androidConnected;
+    const justConnected = connected && !wasConnected;
+    wasConnected = connected;
+
+    const img = el('feed-img');
+    const placeholder = el('feed-placeholder');
+    const badge = el('feed-badge');
+    const fps = el('overlay-fps');
+
+    if (connected) {
+      setStatus('connected', 'Streaming');
+      if (img) {
+        img.style.display = 'block';
+        if (justConnected) {
+          reloadFeed();
+          startKeepalive();
+          img.onerror = () => {
+            if (!wasConnected) return;
+            clearTimeout(retry);
+            retry = setTimeout(reloadFeed, 1500);
+          };
+        }
+      }
+      if (placeholder) placeholder.style.display = 'none';
+      if (fps) fps.style.display = 'block';
+      if (badge) { badge.textContent = '● LIVE'; badge.className = 'stage-tag live'; }
+    } else {
+      setStatus('connecting', 'Waiting for phone');
+      stopKeepalive();
+      if (img) { img.style.display = 'none'; img.onerror = null; }
+      if (placeholder) placeholder.style.display = 'flex';
+      if (fps) fps.style.display = 'none';
+      if (badge) { badge.textContent = 'OFFLINE'; badge.className = 'stage-tag'; }
+    }
+
+    if (data.h264ReceivedBytes !== undefined) {
+      const mb = data.h264ReceivedBytes / 1048576;
+      setText('stat-h264', mb.toFixed(1));
+    }
+
+    if (data.decodedFrames !== undefined) {
+      setText('hdr-frames', data.decodedFrames.toLocaleString());
+      setText('stat-frames', data.decodedFrames.toLocaleString());
+
+      if (prevFrames === null) {          // first sample only sets the baseline
+        prevFrames = data.decodedFrames;
+        prevStamp = Date.now();
+      }
+      const dt = (Date.now() - prevStamp) / 1000;
+      if (dt >= 0.5) {
+        const fpsNow = Math.max(0, Math.round((data.decodedFrames - prevFrames) / dt));
+        prevFrames = data.decodedFrames;
+        prevStamp = Date.now();
+        fpsHistory.push(fpsNow);
+        if (fpsHistory.length > 30) fpsHistory.shift();
+        const avg = Math.round(fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length);
+        setText('hdr-fps', avg);
+        setText('overlay-fps', avg + ' fps');
+        drawSparkline();
+        const bar = el('health-signal');
+        if (bar) bar.style.width = Math.min(100, (avg / 30) * 100) + '%';
+      }
+    }
+
+    if (data.bitrateKBs !== undefined) {
+      setText('hdr-bitrate', data.bitrateKBs.toFixed(1));
+      setText('stat-bitrate', data.bitrateKBs.toFixed(1));
+    }
+
+    if (data.vcamActive !== undefined) {
+      const tag = el('health-vcam');
+      if (tag) {
+        tag.textContent = data.vcamActive ? 'VCam live' : 'VCam off';
+        tag.className = 'tag ' + (data.vcamActive ? 'ok' : '');
+      }
+    }
+
+    if (data.recording !== undefined) setRecordingUI(data.recording);
+    phoneStats(data);
+  }
+
+  function setText(id, value) {
+    const node = el(id);
+    if (node) node.textContent = value;
+  }
+
+  function phoneStats(data) {
+    if (data.phoneModel) setText('phone-model', data.phoneModel);
+    if (data.phoneAndroidVersion) setText('phone-version', data.phoneAndroidVersion);
+
+    if (data.phoneBattery != null) {
+      const charging = ['charging', 'full'].includes(data.phoneBatteryStatus);
+      setText('phone-battery', data.phoneBattery + '%');
+      setText('phone-battery-icon', charging ? '🔌' : (data.phoneBattery > 25 ? '🔋' : '🪫'));
+      const bar = el('phone-battery-bar');
+      if (bar) {
+        bar.style.width = Math.min(100, data.phoneBattery) + '%';
+        bar.style.background = data.phoneBattery > 60 ? 'var(--ok)'
+          : (data.phoneBattery > 25 ? 'var(--warn)' : 'var(--bad)');
+      }
+    }
+    if (data.phoneTemperature != null) {
+      const node = el('phone-temp');
+      if (node) {
+        node.textContent = data.phoneTemperature.toFixed(1) + '°';
+        node.style.color = data.phoneTemperature > 40 ? 'var(--bad)' : '';
+      }
+    }
+    if (data.phoneUptime != null) {
+      const h = Math.floor(data.phoneUptime / 3600);
+      const m = Math.floor((data.phoneUptime % 3600) / 60);
+      setText('phone-uptime', `${h}h ${m}m`);
+    }
+  }
 
   // ── Sparkline ────────────────────────────────────────────────────────────
+
   function drawSparkline() {
-    const canvas = el.sparkline();
-    if (!canvas) return;
+    const canvas = el('fps-sparkline');
+    if (!canvas || fpsHistory.length < 2) return;
     const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
+    const { width: W, height: H } = canvas;
     ctx.clearRect(0, 0, W, H);
-
-    if (fpsHistory.length < 2) return;
-
     const max = Math.max(30, ...fpsHistory);
     const step = W / (fpsHistory.length - 1);
+    const point = (fps, i) => [i * step, H - (fps / max) * (H - 2) - 1];
 
-    // Fill
     ctx.beginPath();
     ctx.moveTo(0, H);
-    fpsHistory.forEach((fps, i) => {
-      const x = i * step;
-      const y = H - (fps / max) * H;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
+    fpsHistory.forEach((f, i) => ctx.lineTo(...point(f, i)));
     ctx.lineTo(W, H);
     ctx.closePath();
     const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, 'rgba(6,182,212,0.35)');
-    grad.addColorStop(1, 'rgba(6,182,212,0.02)');
+    grad.addColorStop(0, 'rgba(56,189,248,0.35)');
+    grad.addColorStop(1, 'rgba(56,189,248,0.02)');
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Line
     ctx.beginPath();
-    fpsHistory.forEach((fps, i) => {
-      const x = i * step;
-      const y = H - (fps / max) * H;
+    fpsHistory.forEach((f, i) => {
+      const [x, y] = point(f, i);
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
-    ctx.strokeStyle = '#06b6d4';
+    ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
 
-  // ── Orientation — server-side rotation ──────────────────────────────────────
-  function setOrientation(deg) {
-    currentOrientation = parseInt(deg, 10) || 0;
-    const img = el.feedImg();
-    if (!img) return;
-    img.classList.remove('rot-0', 'rot-90', 'rot-180', 'rot-270');
-    img.style.transform = '';
-    img.style.removeProperty('--rot-scale');
-  }
+  // ── Recording ────────────────────────────────────────────────────────────
 
-  /** Force-reload the MJPEG feed URL so the browser opens a fresh connection. */
-  function _reloadFeed() {
-    const img = el.feedImg();
-    if (!img) return;
-    img.src = '/video_feed?' + Date.now();
-  }
-
-  /** Start periodic keepalive reload every 30 s to recover from silent stalls. */
-  function _startFeedKeepalive() {
-    _stopFeedKeepalive();
-    _feedReloadTimer = setInterval(_reloadFeed, 30000);
-  }
-
-  function _stopFeedKeepalive() {
-    if (_feedReloadTimer) { clearInterval(_feedReloadTimer); _feedReloadTimer = null; }
-    if (_feedRetryTimer)  { clearTimeout(_feedRetryTimer);   _feedRetryTimer  = null; }
-  }
-
-  // ── Status updates ────────────────────────────────────────────────────────
-  function setStatus(state, text) {
-    const dot = el.statusDot(), txt = el.statusText();
-    if (dot) dot.className = 'status-dot ' + state;
-    if (txt) txt.textContent = text;
-  }
-
-  function handleStatus(data) {
-    const now = Date.now();
-    const img  = el.feedImg();
-    const ph   = el.feedPH();
-    const ov   = el.feedOverlay();
-    const badge = el.feedBadge();
-
-    const isConn = !!data.androidConnected;
-    const connTransitioned = isConn && !wasAndroidConnected;
-    wasAndroidConnected = isConn;
-
-    if (isConn) {
-      setStatus('connected', 'Streaming Active');
-      if (img) {
-        img.style.display = 'block';
-        if (connTransitioned) {
-          _reloadFeed();
-          _startFeedKeepalive();
-          img.onerror = () => {
-            if (wasAndroidConnected) {
-              if (_feedRetryTimer) clearTimeout(_feedRetryTimer);
-              _feedRetryTimer = setTimeout(_reloadFeed, 1500);
-            }
-          };
-        }
-      }
-      if (ph)    ph.style.display  = 'none';
-      if (ov)    ov.style.display  = 'block';
-      if (badge) { badge.textContent = 'LIVE'; badge.className = 'card-badge live'; }
-    } else {
-      setStatus('connecting', 'Waiting for Stream');
-      _stopFeedKeepalive();
-      if (img)   { img.style.display = 'none'; if (img.onerror) img.onerror = null; }
-      if (ph)    ph.style.display  = 'flex';
-      if (ov)    ov.style.display  = 'none';
-      if (badge) { badge.textContent = 'OFFLINE'; badge.className = 'card-badge'; }
-    }
-
-    // H.264 bytes
-    if (data.h264ReceivedBytes !== undefined) {
-      const kb = data.h264ReceivedBytes / 1024;
-      const hdr = el.hdrH264();
-      if (hdr) hdr.textContent = kb > 1024 ? (kb / 1024).toFixed(2) + ' MB' : kb.toFixed(1) + ' KB';
-    }
-
-    // Decoded frames + FPS
-    if (data.decodedFrames !== undefined) {
-      const hf = el.hdrFrames();
-      if (hf) hf.textContent = data.decodedFrames;
-
-      const dt = (now - prevTimestamp) / 1000;
-      if (dt >= 0.5) {
-        const fps = Math.round((data.decodedFrames - prevDecodedFrames) / dt);
-        prevDecodedFrames = data.decodedFrames;
-        prevTimestamp = now;
-
-        if (fps >= 0) {
-          fpsHistory.push(fps);
-          if (fpsHistory.length > 30) fpsHistory.shift();
-          const avgFps = Math.round(fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length);
-          const hdrFps = el.hdrFps();
-          if (hdrFps) hdrFps.textContent = avgFps;
-          const oFps = el.overlayFps();
-          if (oFps) oFps.textContent = avgFps + ' fps';
-          drawSparkline();
-
-          // Signal bar (30fps = 100%)
-          const sig = el.healthSignal();
-          if (sig) sig.style.width = Math.min(100, (avgFps / 30) * 100) + '%';
-        }
-      }
-    }
-
-    // Bitrate
-    if (data.bitrateKBs !== undefined) {
-      const hb = el.healthBitrate();
-      if (hb) hb.textContent = data.bitrateKBs.toFixed(1) + ' KB/s';
-    }
-
-    // VCam
-    if (data.vcamActive !== undefined) {
-      const hv = el.healthVcam();
-      if (hv) {
-        hv.textContent = data.vcamActive ? 'ON' : 'OFF';
-        hv.style.color = data.vcamActive ? 'var(--accent-emerald)' : 'var(--accent-rose)';
-      }
-    }
-
-    // Recording indicator
-    if (data.recording !== undefined) {
-      _setRecordingUI(data.recording);
-    }
-
-    // ── Phone stats ────────────────────────────────────────────────────────
-    _handlePhoneStats(data);
-  }
-
-  function _handlePhoneStats(data) {
-    // Model
-    if (data.phoneModel) {
-      const pm = el.phoneModel();
-      if (pm) pm.textContent = data.phoneModel;
-    }
-    // Android version
-    if (data.phoneAndroidVersion) {
-      const pv = el.phoneVersion();
-      if (pv) pv.textContent = 'Android ' + data.phoneAndroidVersion;
-    }
-    // Battery
-    if (data.phoneBattery !== undefined && data.phoneBattery !== null) {
-      const pb = el.phoneBattery();
-      const pbar = el.phoneBatteryBar();
-      const picon = el.phoneBatteryIcon();
-      const level = data.phoneBattery;
-      const status = data.phoneBatteryStatus || '';
-      const plugged = data.phoneBatteryPlugged || '';
-      const isCharging = status === 'charging' || status === 'full';
-
-      if (pb) {
-        let statusText = level + '%';
-        if (isCharging) statusText += ' ⚡';
-        pb.textContent = statusText;
-      }
-      if (pbar) {
-        pbar.style.width = Math.min(100, level) + '%';
-        // Color based on level
-        if (level > 60) pbar.style.background = 'var(--accent-emerald, #10b981)';
-        else if (level > 25) pbar.style.background = 'var(--accent-orange, #f59e0b)';
-        else pbar.style.background = 'var(--accent-rose, #f43f5e)';
-      }
-      if (picon) {
-        picon.textContent = isCharging ? '🔌' : (level > 60 ? '🔋' : (level > 25 ? '🪫' : '🪫'));
-      }
-    }
-    // Temperature
-    if (data.phoneTemperature !== undefined && data.phoneTemperature !== null) {
-      const pt = el.phoneTemp();
-      if (pt) {
-        const temp = data.phoneTemperature;
-        pt.textContent = temp.toFixed(1) + '°C';
-        pt.style.color = temp > 40 ? 'var(--accent-rose, #f43f5e)' : 'var(--text-muted, #9ca3af)';
-      }
-    }
-    // Uptime
-    if (data.phoneUptime !== undefined && data.phoneUptime !== null) {
-      const pu = el.phoneUptime();
-      if (pu) {
-        const secs = data.phoneUptime;
-        const h = Math.floor(secs / 3600);
-        const m = Math.floor((secs % 3600) / 60);
-        pu.textContent = h + 'h ' + m + 'm';
-      }
-    }
-  }
-
-  // ── Recording ─────────────────────────────────────────────────────────────
-  function _setRecordingUI(active) {
+  function setRecordingUI(active) {
     isRecording = active;
-    const btn   = el.btnRecord();
-    const dot   = el.recordDot();
-    const label = el.recordLabel();
-    const ind   = el.recIndicator();
-    const hr    = el.healthRec();
-
-    if (btn)   btn.classList.toggle('recording', active);
-    if (dot)   dot.classList.toggle('active', active);
-    if (label) label.textContent = active ? 'Stop Rec' : 'Record';
-    if (ind)   ind.style.display = active ? 'flex' : 'none';
-    if (hr)    { hr.textContent = active ? 'REC' : 'IDLE'; hr.style.color = active ? 'var(--accent-red)' : 'var(--text-muted)'; }
-
-    // Sync mobile controller recording UI
-    const ctrlBtn = document.getElementById('controller-btn-record');
-    const ctrlLed = document.getElementById('led-record');
-    if (ctrlBtn) ctrlBtn.classList.toggle('active', active);
-    if (ctrlLed) ctrlLed.classList.toggle('active', active);
+    el('btn-record')?.classList.toggle('recording', active);
+    const dot = el('record-dot');
+    if (dot) dot.className = 'dot' + (active ? ' error' : '');
+    setText('record-label', active ? 'Stop' : 'Record');
   }
 
   async function toggleRecording() {
+    const path = isRecording ? '/api/record/stop' : '/api/record/start';
     try {
-      if (!isRecording) {
-        const res = await fetch('/api/record/start', { method: 'POST' });
-        const json = await res.json();
-        if (res.ok) {
-          Toast.show(`✓ Recording started → ${json.file}`, 'success');
-          _setRecordingUI(true);
-        } else {
-          Toast.show(`⚠️ Record start failed: ${json.error}`, 'error');
-        }
-      } else {
-        const res = await fetch('/api/record/stop', { method: 'POST' });
-        const json = await res.json();
-        if (res.ok) {
-          Toast.show(`✓ Recording stopped. Saved: ${json.file}`, 'success');
-          _setRecordingUI(false);
-        } else {
-          Toast.show(`⚠️ Record stop failed: ${json.error}`, 'error');
-        }
-      }
+      const res = await fetch(path, { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || res.statusText);
+      setRecordingUI(!isRecording);
+      Toast.show(isRecording ? `Saved → ${json.file}` : 'Recording started', 'success');
     } catch (err) {
-      Toast.show(`Recording error: ${err.message}`, 'error');
+      Toast.show(`Recording: ${err.message}`, 'error');
     }
   }
 
-  // ── Reconnect ─────────────────────────────────────────────────────────────
   async function reconnect() {
-    Toast.show('Requesting pipeline reconnect...');
-    setStatus('connecting', 'Reconnecting…');
+    setStatus('connecting', 'Restarting…');
     try {
       const res = await fetch('/api/reconnect', { method: 'POST' });
-      if (res.ok) Toast.show('✓ Reconnect command sent.', 'success');
-      else        Toast.show(`Reconnect failed: ${res.statusText}`, 'error');
+      if (!res.ok) throw new Error(res.statusText);
+      Toast.show('Pipeline restarting…', 'info');
     } catch (err) {
-      Toast.show(`Reconnect error: ${err.message}`, 'error');
+      Toast.show(`Restart failed: ${err.message}`, 'error');
     }
   }
 
-  // ── Snapshot ──────────────────────────────────────────────────────────────
+  // ── Snapshot / fullscreen / PiP ──────────────────────────────────────────
+
   function snapshot() {
-    const img = el.feedImg();
+    const img = el('feed-img');
     if (!img || img.style.display === 'none') {
-      Toast.show('⚠️ No active stream to snapshot.', 'error'); return;
+      Toast.show('No stream to capture.', 'error');
+      return;
     }
     try {
       const canvas = document.createElement('canvas');
-      canvas.width  = img.naturalWidth  || 640;
-      canvas.height = img.naturalHeight || 360;
+      canvas.width = img.naturalWidth || 1280;
+      canvas.height = img.naturalHeight || 720;
       canvas.getContext('2d').drawImage(img, 0, 0);
       const link = document.createElement('a');
-      link.download = `snapshot-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.png`;
+      link.download = `snapshot-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      Toast.show('✓ Snapshot saved.', 'success');
+      Toast.show('Snapshot saved.', 'success');
     } catch (err) {
-      Toast.show(`Snapshot error: ${err.message}`, 'error');
+      Toast.show(`Snapshot: ${err.message}`, 'error');
     }
   }
 
-  // ── Fullscreen (Native HTML5 API) ─────────────────────────────────────────
   async function toggleFullscreen() {
-    const container = el.feedContainer();
-    if (!container) return;
+    const stage = el('stage');
+    if (!stage) return;
     try {
-      if (!document.fullscreenElement) {
-        if (container.requestFullscreen) {
-          await container.requestFullscreen();
-        } else if (container.webkitRequestFullscreen) {
-          await container.webkitRequestFullscreen();
-        }
-      } else {
-        if (document.exitFullscreen) {
-          await document.exitFullscreen();
-        }
-      }
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await stage.requestFullscreen();
     } catch (err) {
-      console.error('Fullscreen error:', err);
-      Toast.show(`Fullscreen error: ${err.message}`, 'error');
+      Toast.show(`Fullscreen: ${err.message}`, 'error');
     }
   }
 
-  // Listen to fullscreen changes to update class and UI state
   document.addEventListener('fullscreenchange', () => {
-    isFullscreen = !!document.fullscreenElement;
-    const container = el.feedContainer();
-    if (container) {
-      container.classList.toggle('fullscreen-mode', isFullscreen);
-    }
+    el('stage')?.classList.toggle('fullscreen-mode', !!document.fullscreenElement);
   });
 
-  // ── Picture in Picture ────────────────────────────────────────────────────
   async function togglePiP() {
-    const img = el.feedImg();
+    const img = el('feed-img');
     if (!img || img.style.display === 'none') {
-      Toast.show('⚠️ PiP requires an active stream.', 'error'); return;
+      Toast.show('PiP needs an active stream.', 'error');
+      return;
     }
-
     try {
-      const video = document.getElementById('pip-video');
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
-        Toast.show('✓ Exited PiP.', 'success');
         return;
       }
-
+      const video = el('pip-video');
       const canvas = document.createElement('canvas');
       canvas.width = 640; canvas.height = 360;
       const ctx = canvas.getContext('2d');
-      let animId;
-      function drawFrame() {
+      let frame;
+      const paint = () => {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        animId = requestAnimationFrame(drawFrame);
-      }
-      drawFrame();
-
-      const stream = canvas.captureStream(30);
-      video.srcObject = stream;
+        frame = requestAnimationFrame(paint);
+      };
+      paint();
+      video.srcObject = canvas.captureStream(30);
       await video.play();
       await video.requestPictureInPicture();
-      Toast.show('✓ PiP activated.', 'success');
-
       video.addEventListener('leavepictureinpicture', () => {
-        cancelAnimationFrame(animId);
+        cancelAnimationFrame(frame);
         video.srcObject = null;
       }, { once: true });
     } catch (err) {
-      Toast.show(`PiP error: ${err.message}`, 'error');
+      Toast.show(`PiP: ${err.message}`, 'error');
     }
   }
 
-  return { setStatus, handleStatus, setOrientation, reconnect, snapshot, toggleFullscreen, togglePiP, toggleRecording };
+  return { setStatus, handleStatus, setOrientation, setResolution, reloadFeed,
+           reconnect, snapshot, toggleFullscreen, togglePiP, toggleRecording };
 })();

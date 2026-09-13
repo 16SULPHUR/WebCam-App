@@ -48,6 +48,7 @@
     "maxConcurrent": 4,
     "globalScale": 1.0,
     "showLabel": false,
+    "showTracking": false,
     "mappings": [
       {
         "id": "default_thumbs_up",

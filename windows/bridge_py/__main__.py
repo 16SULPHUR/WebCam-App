@@ -8,7 +8,7 @@ Starts:
   1. ConfigManager  — loads config.json
   2. EventBroadcaster  — SSE + video hub
   3. RecordingManager  — H.264 → MP4 recording
-  4. BridgeServer  — HTTP dashboard on :3000
+  4. BridgeServer  — HTTP dashboard on :5134
   5. Pipeline  — FFmpeg VCam + Web + Python frame_sender
   6. AndroidTcpClient  — connects to Android over ADB
 
@@ -51,7 +51,7 @@ PYTHON_PATH = resolve_tool(
 )
 # ─────────────────────────────────────────────────────────────────────────────
 
-from .config      import ConfigManager
+from .config      import DASHBOARD_PORT, ConfigManager
 from .broadcaster import EventBroadcaster
 from .recorder    import RecordingManager
 from .pipeline    import Pipeline
@@ -82,7 +82,7 @@ def main() -> None:
     tui = TuiManager(broadcaster, config) if use_tui else None
 
     # ── 2. HTTP server ────────────────────────────────────────────────────────
-    server = BridgeServer(config, broadcaster, recorder, PUBLIC_DIR, port=3000)
+    server = BridgeServer(config, broadcaster, recorder, PUBLIC_DIR, port=DASHBOARD_PORT)
 
     # ── 3. Pipeline ───────────────────────────────────────────────────────────
     pipeline = Pipeline(
@@ -161,7 +161,7 @@ def main() -> None:
         tcp_client.start()
         phone_stats.start()
 
-        print(f"\nDashboard -> http://localhost:3000")
+        print(f"\nDashboard -> http://localhost:{DASHBOARD_PORT}")
         print("Press Ctrl+C to stop.\n")
 
         try:

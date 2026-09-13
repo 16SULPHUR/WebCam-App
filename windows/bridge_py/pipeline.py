@@ -10,6 +10,7 @@ Responsibilities:
   - Expose restart() for config changes and reconnect
 """
 
+import json
 import subprocess
 import threading
 import time
@@ -23,6 +24,7 @@ from .recorder import RecordingManager
 
 
 # ── Tuning constants ──────────────────────────────────────────────────────────
+RX_STATUS_PREFIX        = "@@RX "   # frame_sender → bridge status channel
 PIPELINE_RESTART_DELAY  = 1.5    # seconds before pipeline respawns
 VCAM_MAX_FAILURES       = 3      # max fast VCam failures before disabling
 VCAM_FAILURE_WINDOW     = 15.0   # seconds — failures within this window count
@@ -335,8 +337,19 @@ class Pipeline:
         try:
             for raw in proc.stderr:
                 msg = raw.decode(errors="replace").strip()
-                if msg:
-                    self._bc.broadcast_log("node", f"[{label}] {msg}")
+                if not msg:
+                    continue
+                if msg.startswith(RX_STATUS_PREFIX):
+                    self._handle_reaction_status(msg[len(RX_STATUS_PREFIX):])
+                    continue
+                self._bc.broadcast_log("node", f"[{label}] {msg}")
+        except Exception:
+            pass
+
+    def _handle_reaction_status(self, payload: str) -> None:
+        """Reaction detector state, emitted by frame_sender once per ~0.5 s."""
+        try:
+            self._bc.update_stats(reactions=json.loads(payload))
         except Exception:
             pass
 

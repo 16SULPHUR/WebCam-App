@@ -3,9 +3,17 @@
 Gestures and facial expressions drop emoji / meme artwork onto the live video —
 burned into the OBS virtual camera, so Zoom, Teams and OBS all see it.
 
-Everything is configured from the dashboard: **Controller → REACTIONS → CONFIG**.
-The switch in that panel turns the whole feature on and off; nothing is loaded
-(no MediaPipe models, no detection thread) while it is off.
+Everything is configured on the dashboard's **Reactions** page
+(<http://localhost:5134/#reactions>). The switch at the top turns the whole
+feature on and off; nothing is loaded — no MediaPipe models, no detection
+thread — while it is off.
+
+**Show tracking on preview** draws the hand skeleton, face landmarks and a HUD
+listing whatever rules match right now. It is the fastest way to tell whether a
+gesture is being recognised (rule matches) or just not firing yet (hold frames /
+cooldown). The overlay is drawn on the dashboard preview only — never on the
+virtual camera, so nobody in your call sees it. The same numbers appear live on
+the Reactions page and in the terminal UI.
 
 ```
 windows/
@@ -87,6 +95,7 @@ def _drop(t, i, n, seed):
 | Max on screen | Overlay cap; oldest is dropped |
 | Overall size | Multiplies every reaction's size |
 | Burn trigger name | Draws the trigger label into the frame — handy while tuning |
+| Show tracking | Skeleton + live matches on the dashboard preview (not the virtual camera) |
 
 Per reaction you can override the artwork, animation, placement (follow the
 hand/face, or a fixed corner), size and duration, and the **▶** button fires one

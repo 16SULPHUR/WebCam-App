@@ -15,6 +15,7 @@ DEFAULTS = {
     "maxConcurrent": 4,
     "globalScale": 1.0,
     "showLabel": False,
+    "showTracking": False,
     "mappings": [],
 }
 

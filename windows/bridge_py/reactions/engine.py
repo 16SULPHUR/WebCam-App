@@ -27,6 +27,19 @@ from .triggers import TRIGGERS, anchor_for, resolve_conflicts
 
 DETECT_WIDTH = 480
 
+# MediaPipe's 21-point hand skeleton
+HAND_BONES = (
+    (0, 1), (0, 5), (0, 17), (5, 9), (9, 13), (13, 17),
+    (1, 2), (2, 3), (3, 4),
+    (5, 6), (6, 7), (7, 8),
+    (9, 10), (10, 11), (11, 12),
+    (13, 14), (14, 15), (15, 16),
+    (17, 18), (18, 19), (19, 20),
+)
+
+# Face landmarks the expression rules actually read
+FACE_POINTS = (13, 14, 61, 291, 33, 133, 159, 145, 362, 263, 386, 374, 105, 334, 234, 454)
+
 
 def _log(msg: str) -> None:
     sys.stderr.write(f"[Reactions] {msg}\n")
@@ -122,6 +135,11 @@ class ReactionEngine:
         self._state: dict[str, dict] = {}
         self._last_test = None
         self.last_fired = ""
+
+        # Tracking / diagnostics
+        self._track: dict = {"hands": [], "faces": [], "matched": [], "fps": 0.0}
+        self._det_fps = 0.0
+        self._det_last = 0.0
 
     # ── Configuration ─────────────────────────────────────────────────────
 
@@ -304,6 +322,7 @@ class ReactionEngine:
             try:
                 hands, faces = self._detector.process(frame, sensitivity)
                 fired = self._evaluate(hands, faces, sensitivity)
+                self._record_tracking(hands, faces, fired)
                 self._spawn(fired, mappings)
             except Exception as exc:
                 _log(f"detection error: {exc}")
@@ -315,6 +334,22 @@ class ReactionEngine:
             self._detector.close()
             self._detector = None
             self._detector_key = None
+
+    def _record_tracking(self, hands, faces, hits) -> None:
+        now = time.monotonic()
+        if self._det_last:
+            dt = now - self._det_last
+            if dt > 0:
+                inst = 1.0 / dt
+                self._det_fps = inst if not self._det_fps else self._det_fps * 0.8 + inst * 0.2
+        self._det_last = now
+        with self._lock:
+            self._track = {
+                "hands": [h.lm[:, :2].copy() for h in hands],
+                "faces": [f.lm[:, :2].copy() for f in faces],
+                "matched": sorted(hits.keys()),
+                "fps": round(self._det_fps, 1),
+            }
 
     def _evaluate(self, hands, faces, sensitivity) -> dict[str, tuple[float, float]]:
         """Return {trigger_id: anchor} for every rule matching this frame."""
@@ -378,3 +413,74 @@ class ReactionEngine:
                 self._overlays = self._overlays[-max_live:]
         self.last_fired = trigger
         _log(f"fired: {trigger or 'preview'} → {m.get('value')}")
+
+    # ── Tracking overlay (dashboard preview only) ─────────────────────────────
+
+    def draw_tracking(self, frame_rgb: np.ndarray) -> np.ndarray:
+        """Draw the landmark skeleton and a detection HUD onto a frame."""
+        with self._lock:
+            track = dict(self._track)
+            enabled = bool(self._cfg.get("enabled"))
+            overlays = len(self._overlays)
+
+        h, w = frame_rgb.shape[:2]
+        unit = max(1, int(round(h / 360.0)))
+
+        for face in track.get("faces", []):
+            xs = (face[:, 0] * w).astype(np.int32)
+            ys = (face[:, 1] * h).astype(np.int32)
+            cv2.rectangle(frame_rgb, (int(xs.min()), int(ys.min())),
+                          (int(xs.max()), int(ys.max())), (244, 114, 182), unit)
+            for idx in FACE_POINTS:
+                if idx < len(face):
+                    cv2.circle(frame_rgb, (int(xs[idx]), int(ys[idx])), unit + 1,
+                               (249, 168, 212), -1)
+
+        for hand in track.get("hands", []):
+            pts = [(int(x * w), int(y * h)) for x, y in hand]
+            for a, b in HAND_BONES:
+                cv2.line(frame_rgb, pts[a], pts[b], (56, 189, 248), unit, cv2.LINE_AA)
+            for i, pt in enumerate(pts):
+                colour = (250, 204, 21) if i in (4, 8, 12, 16, 20) else (255, 255, 255)
+                cv2.circle(frame_rgb, pt, unit + 1, colour, -1, cv2.LINE_AA)
+
+        lines = [
+            (f"hands {len(track.get('hands', []))}   faces {len(track.get('faces', []))}   "
+             f"det {track.get('fps', 0)}/s   overlays {overlays}") if enabled else "reactions off",
+            "match  " + (", ".join(track.get("matched", [])) or "-"),
+        ]
+        self._hud(frame_rgb, lines, unit)
+        return frame_rgb
+
+    @staticmethod
+    def _hud(frame_rgb, lines: list[str], unit: int) -> None:
+        scale = 0.42 * unit
+        thick = max(1, unit)
+        pad = 5 * unit
+        step = int(17 * unit)
+        widths = [cv2.getTextSize(t, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)[0][0] for t in lines]
+        box_w = max(widths) + pad * 2
+        box_h = step * len(lines) + pad
+        panel = frame_rgb[0:box_h, 0:box_w]
+        panel[:] = (panel * 0.35).astype(np.uint8)
+        for i, text in enumerate(lines):
+            cv2.putText(frame_rgb, text, (pad, int(step * (i + 1) - 3 * unit)),
+                        cv2.FONT_HERSHEY_SIMPLEX, scale,
+                        (125, 211, 252) if i else (226, 232, 240), thick, cv2.LINE_AA)
+
+    def stats(self) -> dict:
+        """Compact detection state for the terminal UI and the dashboard."""
+        with self._lock:
+            track = dict(self._track)
+            return {
+                "enabled": bool(self._cfg.get("enabled")),
+                "mappings": len(self._mappings),
+                "overlays": len(self._overlays),
+                "hands": len(track.get("hands", [])),
+                "faces": len(track.get("faces", [])),
+                "matched": track.get("matched", []),
+                "detectorFps": track.get("fps", 0.0),
+                "backend": (type(self._detector._backend).__name__.strip("_").replace("Backend", "").lower()
+                            if self._detector is not None and self._detector.ready else ""),
+                "lastFired": self.last_fired,
+            }

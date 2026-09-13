@@ -1,91 +1,116 @@
 """
-tui.py — Interactive Terminal User Interface for USB Webcam Bridge.
+tui.py — Live terminal dashboard for the USB Webcam Bridge.
 
-Uses the `rich` library to render a live layout showing:
-  1. GPU stats (utilization, VRAM, temperature) using nvidia-smi queries.
-  2. Android stream status and network metrics.
-  3. Interactive, colorized log stream.
+Panels: stream health, pipeline effects, reaction detection state, GPU load,
+and a de-duplicated log stream. Rendered with `rich`; falls back to plain
+prints automatically when stdout is not a TTY (see __main__.py --no-tui).
 """
 
-import os
-import sys
-import time
 import queue
-import threading
+import re
 import subprocess
+import threading
+import time
 from typing import Optional
 
-from rich.live import Live
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.text import Text
 from rich.align import Align
+from rich.layout import Layout
+from rich.live import Live
+from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
+
+from .config import DASHBOARD_PORT
+
+# Log lines that carry no signal — dropped before they reach the stream.
+NOISE = re.compile(
+    r"(Processed frame #|frame=\s*\d+|"
+    r"All log messages before absl::InitializeLog|"
+    r"inference_feedback_manager|"
+    r"TensorFlow Lite XNNPACK|"
+    r"Created TensorFlow Lite|"
+    r"feedback tensors|"
+    r"gl_context|landmark_projection_calculator)", re.I)
+
+SOURCES = {
+    "system": ("SYSTEM", "green"),
+    "node": ("SYSTEM", "green"),
+    "python": ("PYTHON", "cyan"),
+    "pysender": ("PYTHON", "cyan"),
+    "ffmpeg": ("FFMPEG", "magenta"),
+    "ffmpeg-vcam": ("FFMPEG", "magenta"),
+    "phone": ("PHONE", "yellow"),
+}
+
+OK = "bold green"
+DIM = "grey50"
+WARN = "bold yellow"
+BAD = "bold red"
+
+
+def _bar(fraction: float, width: int = 14) -> str:
+    fraction = max(0.0, min(1.0, fraction))
+    filled = int(width * fraction)
+    colour = "red" if fraction > 0.85 else ("yellow" if fraction > 0.5 else "green")
+    return f"[{colour}]" + "█" * filled + "[grey30]" + "░" * (width - filled) + f"[/grey30][/{colour}]"
+
+
+def _kv(table: Table, key: str, value: str, style: str = "white") -> None:
+    table.add_row(Text(key, style=DIM), Text.from_markup(f"[{style}]{value}[/{style}]"))
+
 
 class TuiManager:
-    _instance: Optional['TuiManager'] = None
+    _instance: Optional["TuiManager"] = None
 
     def __init__(self, broadcaster, config=None) -> None:
         self._bc = broadcaster
         self._cfg = config
-        self._logs_queue: queue.Queue = queue.Queue()
-        self._logs_list: list = []
-        self._max_logs = 60
-        self._start_time = time.monotonic()
-        
-        self.gpu_data = {
-            "name": "Checking GPU...",
-            "util": 0,
-            "mem_used": 0,
-            "mem_total": 1,
-            "temp": 0,
-            "available": False
-        }
-        
+        self._queue: queue.Queue = queue.Queue()
+        self._logs: list = []           # [ts, source, message, level, count]
+        self._max_logs = 200
+        self._start = time.monotonic()
+
+        self.gpu = {"name": "—", "util": 0, "mem_used": 0, "mem_total": 1,
+                    "temp": 0, "available": False}
+
         self.running = False
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._live: Optional[Live] = None
         self.layout: Optional[Layout] = None
-        self._monitor_thread: Optional[threading.Thread] = None
-        
         TuiManager._instance = self
 
     @classmethod
-    def get_instance(cls) -> Optional['TuiManager']:
+    def get_instance(cls) -> Optional["TuiManager"]:
         return cls._instance
 
-    # ── Context Manager API ───────────────────────────────────────────────────
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    def __enter__(self) -> 'TuiManager':
+    def __enter__(self) -> "TuiManager":
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, *_exc) -> None:
         self.stop()
-
-    # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def start(self) -> None:
         with self._lock:
             if self.running:
                 return
             self.running = True
-            
-        # Add a startup log
-        self.log("system", "Interactive Terminal TUI initialized.")
 
-        # Spawn GPU status monitoring background thread
-        self._monitor_thread = threading.Thread(
-            target=self._monitor_gpu_loop,
-            name="TuiGpuMonitor",
-            daemon=True
+        self.log("system", f"Dashboard ready on http://localhost:{DASHBOARD_PORT}")
+        threading.Thread(target=self._gpu_loop, name="TuiGpu", daemon=True).start()
+
+        self.layout = Layout()
+        self.layout.split_column(
+            Layout(name="header", size=3),
+            Layout(name="body"),
+            Layout(name="footer", size=3),
         )
-        self._monitor_thread.start()
-
-        # Build Rich layout
-        self.layout = self._build_layout()
-        
-        # Start Live render wrapper
+        self.layout["body"].split_row(
+            Layout(name="side", ratio=4, minimum_size=34),
+            Layout(name="logs", ratio=8),
+        )
         self._live = Live(self.layout, refresh_per_second=6, screen=True)
         self._live.start()
 
@@ -94,254 +119,214 @@ class TuiManager:
             if not self.running:
                 return
             self.running = False
-            
         if self._live:
             try:
                 self._live.stop()
             except Exception:
                 pass
             self._live = None
-
         TuiManager._instance = None
-        print("\nTUI closed. Terminal state restored.\n")
+        print("\nBridge stopped.\n")
 
-    # ── Logs Ingestion ────────────────────────────────────────────────────────
+    # ── Log ingestion ─────────────────────────────────────────────────────────
 
     def log(self, source: str, message: str) -> None:
-        ts = time.strftime("%H:%M:%S")
-        self._logs_queue.put((ts, source, message))
+        if message and not NOISE.search(message):
+            self._queue.put((time.strftime("%H:%M:%S"), source, message))
 
-    def _drain_logs(self) -> None:
-        while not self._logs_queue.empty():
+    @staticmethod
+    def _level(msg: str) -> str:
+        low = msg.lower()
+        if "error" in low or "failed" in low or "traceback" in low:
+            return "error"
+        if "warn" in low:
+            return "warn"
+        if low.startswith("✓") or "ready" in low or "started" in low or "fired" in low:
+            return "ok"
+        return "info"
+
+    def _drain(self) -> None:
+        while True:
             try:
-                ts, src, msg = self._logs_queue.get_nowait()
-                # Clean up msg if it contains internal tags or escape codes
-                self._logs_list.append((ts, src, msg))
-                if len(self._logs_list) > self._max_logs:
-                    self._logs_list.pop(0)
+                ts, src, msg = self._queue.get_nowait()
             except queue.Empty:
-                break
-
-    # ── GPU Monitoring Thread ──────────────────────────────────────────────────
-
-    def _monitor_gpu_loop(self) -> None:
-        while self.running:
-            stats = self._query_nvidia_smi()
+                return
+            msg = re.sub(r"^\[(FFmpeg-VCam|python|node)\]\s*", "", msg).strip()
             with self._lock:
-                self.gpu_data.update(stats)
+                # collapse a repeat of the previous line into a counter
+                if self._logs and self._logs[-1][2] == msg and self._logs[-1][1] == src:
+                    self._logs[-1][0] = ts
+                    self._logs[-1][4] += 1
+                    continue
+                self._logs.append([ts, src, msg, self._level(msg), 1])
+                if len(self._logs) > self._max_logs:
+                    self._logs.pop(0)
+
+    # ── GPU polling ───────────────────────────────────────────────────────────
+
+    def _gpu_loop(self) -> None:
+        while self.running:
+            stats = self._query_gpu()
+            with self._lock:
+                self.gpu.update(stats)
             time.sleep(1.0)
 
-    def _query_nvidia_smi(self) -> dict:
+    @staticmethod
+    def _query_gpu() -> dict:
         try:
-            # Query nvidia-smi for: name, utilization, used memory, total memory, temperature
             res = subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
-                    "--format=csv,noheader,nounits"
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=0.8
-            )
-            stdout = res.stdout.strip()
-            if not stdout:
-                raise ValueError("Empty output")
-            
-            line = stdout.split("\n")[0]
-            parts = [p.strip() for p in line.split(",")]
-            
-            return {
-                "name": parts[0],
-                "util": int(parts[1]),
-                "mem_used": int(parts[2]),
-                "mem_total": int(parts[3]),
-                "temp": int(parts[4]),
-                "available": True
-            }
+                ["nvidia-smi",
+                 "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, check=True, timeout=0.8)
+            parts = [p.strip() for p in res.stdout.strip().splitlines()[0].split(",")]
+            return {"name": parts[0], "util": int(parts[1]), "mem_used": int(parts[2]),
+                    "mem_total": max(1, int(parts[3])), "temp": int(parts[4]), "available": True}
         except Exception:
-            return {
-                "name": "NVIDIA GPU (Offline)",
-                "util": 0,
-                "mem_used": 0,
-                "mem_total": 4096,
-                "temp": 0,
-                "available": False
-            }
+            return {"name": "no NVIDIA GPU", "util": 0, "mem_used": 0,
+                    "mem_total": 1, "temp": 0, "available": False}
 
-    # ── Layout and Rendering ──────────────────────────────────────────────────
-
-    def _build_layout(self) -> Layout:
-        layout = Layout()
-        layout.split_column(
-            Layout(name="header", size=3),
-            Layout(name="body"),
-            Layout(name="footer", size=3)
-        )
-        layout["body"].split_row(
-            Layout(name="sidebar", ratio=4),
-            Layout(name="main", ratio=7)
-        )
-        return layout
+    # ── Rendering ─────────────────────────────────────────────────────────────
 
     def update_render(self) -> None:
-        """Call periodically (or let Live thread handle it) to refresh screen."""
-        if not self.running or not self._live:
+        if not self.running or not self._live or not isinstance(self.layout, Layout):
             return
-        
-        self._drain_logs()
-        
-        # Build views
-        header_view = self._render_header()
-        sidebar_view = self._render_sidebar()
-        main_view = self._render_main()
-        footer_view = self._render_footer()
-        
-        # Inject views into layout
-        layout = self.layout
-        if isinstance(layout, Layout):
-            layout["header"].update(header_view)
-            layout["sidebar"].update(sidebar_view)
-            layout["main"].update(main_view)
-            layout["footer"].update(footer_view)
-
-    def _render_header(self) -> Panel:
-        uptime = int(time.monotonic() - self._start_time)
-        m, s = divmod(uptime, 60)
-        h, m = divmod(m, 60)
-        uptime_str = f"{h:02d}:{m:02d}:{s:02d}"
-        
-        # Fetch stats from broadcaster
-        stats = self._bc.get_stats()
-        conn_symbol = "🟢" if stats.get("androidConnected") else "🔴"
-        conn_text = "Connected" if stats.get("androidConnected") else "Disconnected"
-        
-        text = Text.assemble(
-            (" USB WEBCAM BRIDGE ", "bold reverse cyan"),
-            "  |  Status: ",
-            (f"{conn_symbol} {conn_text}", "bold green" if stats.get("androidConnected") else "bold red"),
-            "  |  Uptime: ",
-            (uptime_str, "bold yellow"),
-            "  |  VCam Output: ",
-            ("ACTIVE" if stats.get("vcamActive") else "INACTIVE", "bold green" if stats.get("vcamActive") else "bold dim")
-        )
-        
-        return Panel(Align.center(text), border_style="cyan")
-
-    def _render_sidebar(self) -> Table:
-        # Layout multiple tables inside the sidebar Panel
+        self._drain()
         stats = self._bc.get_stats()
         cfg = self._cfg.to_dict() if self._cfg else {}
-        
-        # 1. Pipeline Status
-        t_pipe = Table(show_header=False, expand=True, box=None)
-        t_pipe.add_row("[bold cyan]STREAM STATISTICS[/bold cyan]")
-        t_pipe.add_row(f"Resolution:  [bold white]{cfg.get('resolution', 'auto')}[/bold white]")
-        t_pipe.add_row(f"Target FPS:  [bold white]{cfg.get('targetFps', 30)} fps[/bold white]")
-        t_pipe.add_row(f"Net Bitrate: [bold white]{stats.get('bitrateKBs', 0.0)} KB/s[/bold white]")
-        t_pipe.add_row(f"Total Frames: [bold white]{stats.get('decodedFrames', 0)}[/bold white]")
-        t_pipe.add_row(f"Record Mode: [bold red]{'🔴 RECORDING' if stats.get('recording') else '⚪ IDLE'}[/bold red]")
+        self.layout["header"].update(self._header(stats, cfg))
+        self.layout["side"].update(self._sidebar(stats, cfg))
+        self.layout["logs"].update(self._log_panel())
+        self.layout["footer"].update(self._footer())
 
-        # 2. GPU Performance Dashboard
-        with self._lock:
-            gpu = dict(self.gpu_data)
-            
-        t_gpu = Table(show_header=False, expand=True, box=None)
-        t_gpu.add_row("")
-        t_gpu.add_row("[bold magenta]GPU HARDWARE PERFORMANCE[/bold magenta]")
-        t_gpu.add_row(f"Model: [bold white]{gpu['name'][:24]}[/bold white]")
-        
-        # Utilization sparkline
-        bar_w = 12
-        filled_u = int(bar_w * (gpu['util'] / 100))
-        util_color = "red" if gpu['util'] > 85 else ("yellow" if gpu['util'] > 50 else "green")
-        util_bar = f"[{util_color}]" + "█" * filled_u + "░" * (bar_w - filled_u) + f"[/{util_color}]"
-        t_gpu.add_row(f"GPU Load:  {util_bar} [bold white]{gpu['util']}%[/bold white]")
-        
-        # Memory sparkline
-        mem_pct = (gpu['mem_used'] / gpu['mem_total'])
-        filled_m = int(bar_w * mem_pct)
-        mem_color = "red" if mem_pct > 0.85 else ("yellow" if mem_pct > 0.50 else "green")
-        mem_bar = f"[{mem_color}]" + "█" * filled_m + "░" * (bar_w - filled_m) + f"[/{mem_color}]"
-        t_gpu.add_row(f"VRAM Used: {mem_bar} [bold white]{gpu['mem_used']} / {gpu['mem_total']} MB[/bold white]")
-        
-        # Temperature
-        temp = gpu['temp']
-        if temp < 62:
-            t_color = "green"
-        elif temp < 78:
-            t_color = "yellow"
-        else:
-            t_color = "red"
-        t_gpu.add_row(f"GPU Temp:  [{t_color}]● {temp}°C[/{t_color}]")
-        
-        # Active Segmentation engine
-        engine = cfg.get("segmentationEngine", "mediapipe")
-        ft_active = "ON" if cfg.get("faceTouchupEnabled") else "OFF"
-        t_gpu.add_row(f"Seg Engine: [bold cyan]{engine.upper()}[/bold cyan]")
-        t_gpu.add_row(f"Face Mesh:  [bold pink]{ft_active}[/bold pink]")
-
-        # 3. Outer container
-        grid = Table(show_header=False, expand=True, box=None)
-        grid.add_row(t_pipe)
-        grid.add_row(t_gpu)
-        
-        return Panel(grid, title="System Health", border_style="magenta")
-
-    def _render_main(self) -> Panel:
-        text = Text()
-        
-        with self._lock:
-            logs = list(self._logs_list)
-            
-        for ts, src, msg in logs:
-            # Color code source labels
-            src_lower = src.lower()
-            if src_lower in ("system", "node"):
-                src_style = "bold green"
-                src_label = "SYSTEM"
-            elif src_lower in ("python", "pysender"):
-                src_style = "bold cyan"
-                src_label = "PYTHON"
-            elif src_lower in ("ffmpeg", "ffmpeg-vcam"):
-                src_style = "bold magenta"
-                src_label = "FFMPEG"
-            elif "phone" in src_lower or "stats" in src_lower:
-                src_style = "bold yellow"
-                src_label = "PHONE "
-            else:
-                src_style = "bold white"
-                src_label = src.upper()[:6].ljust(6)
-
-            text.append(f"[{ts}] ", "dim")
-            text.append(f"[{src_label}] ", src_style)
-            
-            # Substring styling for warning / error highlights in messages
-            msg_lower = msg.lower()
-            if "error" in msg_lower or "failed" in msg_lower:
-                text.append(msg, "bold red")
-            elif "warning" in msg_lower or "warn" in msg_lower:
-                text.append(msg, "bold yellow")
-            else:
-                text.append(msg, "white")
-            text.append("\n")
-            
-        return Panel(text, title="Interactive Log Stream", border_style="green", expand=True)
-
-    def _render_footer(self) -> Panel:
+    def _header(self, stats: dict, cfg: dict) -> Panel:
+        up = int(time.monotonic() - self._start)
+        connected = stats.get("androidConnected")
+        vcam = stats.get("vcamActive")
         text = Text.assemble(
-            (" Shortcuts: ", "bold yellow"),
-            ("Ctrl + C", "bold white reverse"),
-            (" Safe Shutdown  |  ", "dim"),
-            ("Web Dashboard: ", "bold yellow"),
-            ("http://localhost:3000", "bold underline cyan")
+            (" USB WEBCAM BRIDGE ", "bold reverse cyan"),
+            ("   ", ""),
+            ("● ", OK if connected else BAD),
+            ("Streaming" if connected else "Waiting for phone", OK if connected else BAD),
+            ("   │   ", DIM),
+            (f"{cfg.get('resolution', 'auto')} @ {cfg.get('targetFps', 30)}fps", "white"),
+            ("   │   ", DIM),
+            ("VCam ", DIM), ("ON" if vcam else "OFF", OK if vcam else DIM),
+            ("   │   ", DIM),
+            ("up ", DIM), (f"{up // 3600:02d}:{up // 60 % 60:02d}:{up % 60:02d}", "white"),
         )
-        return Panel(Align.center(text), border_style="dim")
+        return Panel(Align.center(text), border_style="cyan", padding=(0, 1))
+
+    def _sidebar(self, stats: dict, cfg: dict) -> Panel:
+        grid = Table.grid(expand=True)
+        grid.add_row(self._stream_table(stats, cfg))
+        grid.add_row(Text())
+        grid.add_row(self._effects_table(cfg))
+        grid.add_row(Text())
+        grid.add_row(self._reactions_table(stats.get("reactions") or {}, cfg))
+        grid.add_row(Text())
+        grid.add_row(self._gpu_table())
+        return Panel(grid, title="[bold]system[/bold]", border_style="grey35", padding=(0, 1))
+
+    def _stream_table(self, stats: dict, cfg: dict) -> Table:
+        t = Table.grid(expand=True, padding=(0, 1))
+        t.add_column(ratio=2); t.add_column(ratio=3, justify="right")
+        t.add_row(Text("STREAM", style="bold cyan"), Text())
+        _kv(t, "bitrate", f"{stats.get('bitrateKBs', 0.0)} KB/s")
+        _kv(t, "frames", f"{stats.get('decodedFrames', 0):,}")
+        _kv(t, "h264 in", f"{stats.get('h264ReceivedBytes', 0) / 1048576:.1f} MB")
+        rec = stats.get("recording")
+        _kv(t, "recording", "● REC" if rec else "idle", "bold red" if rec else DIM)
+        battery = stats.get("phoneBattery")
+        if battery is not None:
+            _kv(t, "phone", f"{battery}%  {stats.get('phoneTemperature') or 0:.0f}°C")
+        return t
+
+    def _effects_table(self, cfg: dict) -> Table:
+        t = Table.grid(expand=True, padding=(0, 1))
+        t.add_column(ratio=2); t.add_column(ratio=3, justify="right")
+        t.add_row(Text("PIPELINE", style="bold cyan"), Text())
+        bg = cfg.get("bgMode", "none")
+        _kv(t, "background", bg if bg != "none" else "off", "white" if bg != "none" else DIM)
+        if bg != "none":
+            _kv(t, "engine", str(cfg.get("segmentationEngine", "mediapipe")).upper())
+        touch = cfg.get("faceTouchupEnabled")
+        _kv(t, "touch-up", f"{cfg.get('faceTouchupStrength', 0)}%" if touch else "off",
+            "white" if touch else DIM)
+        zoom = float(cfg.get("zoom", 1.0))
+        _kv(t, "zoom/mirror", f"{zoom:.1f}x · {'on' if cfg.get('mirror') else 'off'}")
+        return t
+
+    def _reactions_table(self, rx: dict, cfg: dict) -> Table:
+        t = Table.grid(expand=True, padding=(0, 1))
+        t.add_column(ratio=2); t.add_column(ratio=3, justify="right")
+        t.add_row(Text("REACTIONS", style="bold magenta"), Text())
+
+        conf = cfg.get("reactions") or {}
+        if not conf.get("enabled"):
+            _kv(t, "status", "off", DIM)
+            return t
+
+        det_fps = rx.get("detectorFps", 0)
+        _kv(t, "detector", f"{rx.get('backend') or '…'}  {det_fps}/s",
+            OK if det_fps else WARN)
+        _kv(t, "tracking", f"{rx.get('hands', 0)} hands · {rx.get('faces', 0)} faces")
+        matched = ", ".join(rx.get("matched") or [])
+        _kv(t, "matching", matched or "—", "bold yellow" if matched else DIM)
+        _kv(t, "last fired", rx.get("lastFired") or "—",
+            "bold green" if rx.get("lastFired") else DIM)
+        _kv(t, "on screen", f"{rx.get('overlays', 0)} / {rx.get('mappings', 0)} mapped")
+        if conf.get("showTracking"):
+            _kv(t, "skeleton", "on preview", "bold cyan")
+        return t
+
+    def _gpu_table(self) -> Table:
+        with self._lock:
+            gpu = dict(self.gpu)
+        t = Table.grid(expand=True, padding=(0, 1))
+        t.add_column(ratio=2); t.add_column(ratio=3, justify="right")
+        t.add_row(Text("GPU", style="bold cyan"), Text(gpu["name"][:22], style=DIM))
+        if not gpu["available"]:
+            _kv(t, "status", "CPU only", DIM)
+            return t
+        t.add_row(Text("load", style=DIM),
+                  Text.from_markup(f"{_bar(gpu['util'] / 100)} {gpu['util']:>3}%"))
+        mem = gpu["mem_used"] / gpu["mem_total"]
+        t.add_row(Text("vram", style=DIM),
+                  Text.from_markup(f"{_bar(mem)} {gpu['mem_used'] // 1024:.0f}G"))
+        temp = gpu["temp"]
+        colour = "green" if temp < 62 else ("yellow" if temp < 78 else "red")
+        _kv(t, "temp", f"{temp}°C", colour)
+        return t
+
+    def _log_panel(self) -> Panel:
+        with self._lock:
+            logs = list(self._logs[-120:])
+        body = Text(no_wrap=False)
+        styles = {"error": BAD, "warn": WARN, "ok": "green", "info": "white"}
+        for ts, src, msg, level, count in logs:
+            label, colour = SOURCES.get(src.lower(), (src.upper()[:6], "white"))
+            body.append(f"{ts} ", DIM)
+            body.append(f"{label:<6} ", f"bold {colour}")
+            body.append(msg, styles[level])
+            if count > 1:
+                body.append(f"  ×{count}", "bold grey62")
+            body.append("\n")
+        return Panel(body, title="[bold]logs[/bold]", border_style="grey35", padding=(0, 1))
+
+    def _footer(self) -> Panel:
+        text = Text.assemble(
+            ("Ctrl+C", "bold white on grey30"), (" stop bridge", DIM),
+            ("     ", ""),
+            ("dashboard ", DIM),
+            (f"http://localhost:{DASHBOARD_PORT}", "bold underline cyan"),
+            ("     ", ""),
+            ("--no-tui", "bold white on grey30"), (" plain logs", DIM),
+        )
+        return Panel(Align.center(text), border_style="grey35", padding=(0, 1))
 
 
 def run_tui_loop(tui: TuiManager) -> None:
-    """Invoked to run the update render cycle regularly."""
     try:
         while tui.running:
             tui.update_render()

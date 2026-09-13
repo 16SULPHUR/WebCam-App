@@ -5,8 +5,8 @@ Built on Python's standard-library ThreadingHTTPServer.
 Each request runs in its own thread (safe for long-lived SSE / video streams).
 
 Routes:
-  GET  /                    → index.html
-  GET  /css/*, /js/*        → static files from public/
+  GET  /                       → index.html
+  GET  /css|js|components|img  → static files from public/
   GET  /api/config          → current config JSON
   POST /api/config          → update config + trigger pipeline restart
   POST /api/reconnect       → trigger manual pipeline restart
@@ -15,6 +15,10 @@ Routes:
   GET  /api/status          → one-shot status JSON
   GET  /logs                → Server-Sent Events stream (long-lived)
   GET  /video_feed          → MJPEG multipart stream (long-lived)
+  GET  /api/reactions/catalog  → triggers, animations, artwork, current config
+  POST /api/reactions/upload   → store meme artwork
+  POST /api/reactions/preview  → fire one overlay into the live frame
+  GET  /reactions/assets/*     → reaction artwork files
 """
 
 import json
@@ -25,10 +29,10 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from .broadcaster import EventBroadcaster, SseClient, VideoClient
-from .config import ConfigManager
+from .config import DASHBOARD_PORT, ConfigManager
 from .recorder import RecordingManager
 
 
@@ -65,8 +69,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
         try:
             if path in ("/", "/index.html"):
                 self._serve_file("index.html")
-            elif path == "/dashboard.html":
-                self._serve_file("dashboard.html")
             elif path.startswith("/css/") or path.startswith("/js/") or path.startswith("/components/") or path.startswith("/img/"):
                 self._serve_file(path.lstrip("/"))
             elif path == "/api/config":
@@ -382,7 +384,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self._json(payload)
 
     def _handle_serve_reaction_asset(self, path: str) -> None:
-        rel = path[len("/reactions/assets/"):]
+        rel = unquote(path[len("/reactions/assets/"):])
         abs_path = os.path.realpath(os.path.join(self.reactions_dir, rel))
         if not abs_path.startswith(os.path.realpath(self.reactions_dir)) or not os.path.isfile(abs_path):
             self.send_error(404)
@@ -446,7 +448,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def _handle_serve_background(self, path: str) -> None:
         """Serve a background image file from the backgrounds/ directory."""
-        filename = os.path.basename(path)  # sanitise — no path traversal
+        filename = os.path.basename(unquote(path))  # sanitise — no path traversal
         abs_path = os.path.join(self.backgrounds_dir, filename)
         if not os.path.isfile(abs_path):
             self.send_error(404)
@@ -465,7 +467,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def _handle_serve_skin(self, path: str) -> None:
         """Serve a skin PNG frame file from neko/2023-icon-library/."""
-        parts = [p for p in path.split("/") if p]
+        parts = [p for p in unquote(path).split("/") if p]
         if len(parts) < 3:
             self.send_error(404)
             return
@@ -544,7 +546,7 @@ class BridgeServer:
         broadcaster: EventBroadcaster,
         recorder:    RecordingManager,
         public_dir:  str,
-        port:        int = 3000,
+        port:        int = DASHBOARD_PORT,
     ) -> None:
         self._port    = port
         self._server: Optional[ThreadingBridgeHTTPServer] = None

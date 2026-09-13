@@ -13,6 +13,9 @@ from typing import Any
 
 from .reactions.catalog import default_config as _default_reactions
 
+# Dashboard HTTP port — the one place it is defined.
+DASHBOARD_PORT = 5134
+
 # ── Defaults ──────────────────────────────────────────────────────────────────
 _DEFAULTS: dict[str, Any] = {
     "resolution":  "auto",
